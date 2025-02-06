@@ -5,12 +5,14 @@ Implementation of the tutorial: https://flower.ai/docs/framework/tutorial-quicks
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # Imports
 
-import toml
+from logging import INFO
 import xgboost as xgb
 
 import flwr
 from flwr.common.typing import FitRes, FitIns, EvaluateIns, EvaluateRes
 from flwr.common.typing import Status, Parameters, Code
+from flwr.common.config import unflatten_dict
+from flwr.common.context import Context
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner
 
@@ -23,9 +25,9 @@ random_seed = 42
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # Function definition
 
-def train_test_split(partition, test_fraction, seed):
+def train_test_split(partition, test_fraction, random_seed):
     """Split the data into train and validation set given split rate."""
-    train_test = partition.train_test_split(test_size=test_fraction, seed=seed)
+    train_test = partition.train_test_split(test_size=test_fraction, seed = random_seed)
     partition_train = train_test["train"]
     partition_test = train_test["test"]
 
@@ -36,11 +38,63 @@ def train_test_split(partition, test_fraction, seed):
 
 
 def transform_dataset_to_dmatrix(data):
-    """Transform dataset to DMatrix format for xgboost."""
+    """
+    Transform dataset to DMatrix format for xgboost.
+    """
+    
+    # Get data and label
     x = data["inputs"]
     y = data["label"]
+
+    # Convert in Dmatrix
     new_data = xgb.DMatrix(x, label = y)
+
     return new_data
+
+def load_data(partition_id, num_clients, random_seed = 42):
+    """
+    Load partition HIGGS data.
+    """
+
+    # Only initialize `FederatedDataset` once
+    global fds
+    if fds is None:
+        partitioner = IidPartitioner(num_partitions = num_clients)
+        fds = FederatedDataset(
+            dataset = "jxie/higgs",
+            partitioners = {"train": partitioner},
+        )
+
+    # Load the partition for this `partition_id`
+    partition = fds.load_partition(partition_id, split = "train")
+    partition.set_format("numpy")
+
+    # Train/test splitting
+    train_data, valid_data, num_train, num_val = train_test_split(
+        partition, test_fraction = 0.2, seed = random_seed
+    )
+
+    # Reformat data to DMatrix for xgboost
+    flwr.common.log(INFO, "Reformatting data...")
+    train_dmatrix = transform_dataset_to_dmatrix(train_data)
+    valid_dmatrix = transform_dataset_to_dmatrix(valid_data)
+
+    return train_dmatrix, valid_dmatrix, num_train, num_val
+
+
+def replace_keys(input_dict, match = "-", target = "_"):
+    """
+    Recursively replace match string with target string in dictionary keys.
+    """
+
+    new_dict = {}
+    for key, value in input_dict.items():
+        new_key = key.replace(match, target)
+        if isinstance(value, dict):
+            new_dict[new_key] = replace_keys(value, match, target)
+        else:
+            new_dict[new_key] = value
+    return new_dict
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # Client. Define Flower Client and client_fn
@@ -149,22 +203,25 @@ class FlowerClient(flwr.client.Client):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
+def client_fn(context: Context):
+    """
+    Function that create and return a client
+    """
 
-# Load (HIGGS) dataset and partition.
-# We use a small subset (num_partitions=20) of the dataset for demonstration to speed up the data loading process.
-partitioner = IidPartitioner(num_partitions = 20)
-fds = FederatedDataset(dataset="jxie/higgs", partitioners = {"train": partitioner})
+    # Load model and data
+    partition_id = context.node_config["partition-id"]
+    num_partitions = context.node_config["num-partitions"]
+    train_dmatrix, valid_dmatrix, num_train, num_val = load_data( partition_id, num_partitions)
 
-# Load the partition for this `partition_id`
-partition = fds.load_partition(partition_id, split = "train")
-partition.set_format("numpy")
+    cfg = replace_keys(unflatten_dict(context.run_config))
+    num_local_round = cfg["local_epochs"]
 
-# Train/test splitting
-train_data, valid_data, num_train, num_val = train_test_split(
-    partition, test_fraction = 0.2, seed = random_seed
-)
-
-# Reformat data to DMatrix for xgboost
-# More info about DMatrix here : https://xgboost.readthedocs.io/en/stable/python/python_api.html#xgboost.DMatrix
-train_dmatrix = transform_dataset_to_dmatrix(train_data)
-valid_dmatrix = transform_dataset_to_dmatrix(valid_data)
+    # Return Client instance
+    return FlowerClient(
+        train_dmatrix,
+        valid_dmatrix,
+        num_train,
+        num_val,
+        num_local_round,
+        cfg["params"],
+    )
