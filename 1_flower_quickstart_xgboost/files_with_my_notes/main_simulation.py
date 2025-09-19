@@ -9,16 +9,20 @@ import toml
 import xgboost as xgb
 
 import flwr
-from flwr.common.typing import FitRes, FitIns, EvaluateIns, EvaluateRes
-from flwr.common.typing import Status, Parameters, Code
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner
+
+import server
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # Settings
 
 partition_id = 3
 random_seed = 42
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+strategy = server.FedXgbBagging()
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 # Function definition

@@ -172,8 +172,7 @@ class FlowerClient(flwr.client.Client):
 
         # Bagging: extract the last N=num_local_round trees for sever aggregation
         bst = bst_input[
-            bst_input.num_boosted_rounds()
-            - self.num_local_round : bst_input.num_boosted_rounds()
+            bst_input.num_boosted_rounds() - self.num_local_round : bst_input.num_boosted_rounds()
         ]
 
         return bst
@@ -205,7 +204,7 @@ class FlowerClient(flwr.client.Client):
 
 def client_fn(context: Context):
     """
-    Function that create and return a client
+    Function that create and return a client.
     """
 
     # Load model and data
