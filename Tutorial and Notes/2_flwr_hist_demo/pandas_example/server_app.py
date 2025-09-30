@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from logging import INFO
 
 import numpy as np
-from flwr.common import Context, Message, MessageType, RecordDict
+from flwr.common import Context, Message, MessageType, RecordDict, ConfigRecord
 from flwr.common.logger import log
 from flwr.server import Grid, ServerApp
 
@@ -21,6 +21,8 @@ def main(grid: Grid, context: Context) -> None:
     num_rounds = context.run_config["num-server-rounds"]
     min_nodes = 2
     fraction_sample = context.run_config["fraction-sample"]
+
+    print("AAAAAAAAAAAAAAAAAAAAAAAAAA ", 'fraction_sample' in context.run_config)
 
     for server_round in range(num_rounds):
         log(INFO, "")  # Add newline for log readability
@@ -43,6 +45,11 @@ def main(grid: Grid, context: Context) -> None:
         # Create messages
         recorddict = RecordDict()
         messages = []
+        
+        # Add for test purpose
+        my_config = ConfigRecord({"server_round" : server_round})
+        recorddict['my_config'] = my_config
+
         for node_id in node_ids:  # one message for each node
             message = Message(
                 content=recorddict,
@@ -63,8 +70,10 @@ def main(grid: Grid, context: Context) -> None:
         log(INFO, "Aggregated histogram: %s", aggregated_hist)
 
 
-def aggregate_partial_histograms(messages: Iterable[Message]):
-    """Aggregate partial histograms."""
+def aggregate_partial_histograms(messages : Iterable[Message]):
+    """
+    Aggregate partial histograms.
+    """
 
     aggregated_hist = {}
     total_count = 0

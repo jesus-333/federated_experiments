@@ -43,6 +43,11 @@ def query(msg: Message, context: Context):
     dataset = get_clientapp_dataset(partition_id, num_partitions)
 
     metrics = {}
+    
+    # Add for test purpose
+    print(msg)
+    print(context)
+
     # Compute some statistics for each column in the dataframe
     for feature_name in dataset.columns:
         # Compute histogram
