@@ -29,6 +29,7 @@ serverapp = "pandas_example.server_app:app"
 clientapp = "pandas_example.client_app:app"
 
 [tool.flwr.app.config]
+path_server_config = './server_config.toml'
 num-server-rounds = 3
 fraction-sample = 1.0
 n_nodes = 2

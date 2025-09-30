@@ -10,12 +10,14 @@ A Flower `ServerApp` that constructs a histogram from clients data.
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Imports
 
-import random
+import numpy as np
+import os
 import time
+import toml
+
 from collections.abc import Iterable
 from logging import INFO
 
-import numpy as np
 from flwr.common import Context, Message, MessageType, RecordDict, ConfigRecord
 from flwr.common.logger import log
 from flwr.server import Grid, ServerApp
@@ -27,31 +29,37 @@ app = ServerApp()
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
-    """This `ServerApp` construct a histogram from partial-histograms reported by the
-    `ClientApp`s."""
+    """
+    This `ServerApp` construct a histogram from partial-histograms reported by the `ClientApp`s.
+    """
+
+    path_server_config = context.run_config['path_server_config'] if 'path_server_config' in context.run_config else './server_config.toml'
+    server_config = toml.load(path_server_config)
 
     # General settings
-    num_rounds = 2
-    min_nodes = context.run_config["min_nodes"] if 'min_nodes' in context.run_config else context.node_config['n_nodes']
-    max_number_of_attempts = context.run_config["max_number_of_attempts"] if 'max_number_of_attempts' in context.run_config else 10
+    min_nodes              = server_config['min_nodes'] if 'min_nodes' in server_config else server_config['n_nodes']
+    max_number_of_attempts = server_config['max_number_of_attempts'] if 'max_number_of_attempts' in server_config else 10
+    normalize_hist         = server_config['normalize_hist'] if 'normalize_hist' in server_config else False
     
     # Variable used to create the hist bins
     max, min = None, None
-    n_bins = context.run_config['n_bins']
-    bins_variable = context.run_config['bins_variable']
-    class_to_filter = context.run_config['class_to_filter'] if 'class_to_filter' in context.run_config else None
+    n_bins = server_config['n_bins'] if 'n_bins' in server_config else 10
+    bins_variable = server_config['bins_variable']
+    class_to_filter = server_config['class_to_filter'] if 'class_to_filter' in server_config else None
     
     # Predefined min and max could be used. By default they are None
     # If both are provided the round 0 for min-max computation will be skipped, otherwise the missing value will be computed
-    predefined_min = context.run_config['predefined_min'] if 'predefined_min' in context.run_config else None
-    predefined_max = context.run_config['predefined_max'] if 'predefined_max' in context.run_config else None
+    predefined_min = server_config['predefined_min'] if 'predefined_min' in server_config else None
+    predefined_max = server_config['predefined_max'] if 'predefined_max' in server_config else None
+    
+    # Path to save the final histogram
+    path_to_save = server_config['path_to_save'] if 'path_to_save' in server_config else './final_hist.npy'
     
     # Dictionary used to communicate with the clients
     my_config = dict(
         server_round = -1,
-        min = min,
-        max = max,
-        n_bins = n_bins
+        bins_variable = bins_variable,
+        class_to_filter = class_to_filter,
     )
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -69,10 +77,10 @@ def main(grid: Grid, context: Context) -> None:
         # Note that this id will be used both for round 0 and round 1
         node_ids_round = get_node_ids(grid, min_nodes)
         
-        # Send the messages and receive the results
+        # Get the min and max from the clients
         results_round_zero = get_data_from_clients(grid, node_ids_round, my_config, max_number_of_attempts)
 
-        # Compute min and max and update config
+        # Compute global min and max
         min, max = compute_min_max_federation(results_round_zero)
         
         # Overwrite min or max if predefined values are provided
@@ -91,24 +99,25 @@ def main(grid: Grid, context: Context) -> None:
 
     log(INFO, "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
     log(INFO, "START ROUND for histogram computation (round 1)")
-
+    
+    # Compute bins
     bins = np.linspace(min, max, n_bins + 1)
     log(INFO, f"Using bins: {bins}")
 
     # Update config for round 1
-    my_config['min'] = min
-    my_config['max'] = max
+    my_config['server_round'] = 1
+    my_config['bins'] = bins
+    
+    # Get the partial histograms from the clients
+    results_round_one = get_data_from_clients(grid, node_ids_round, my_config, max_number_of_attempts)
+    
+    # Compute final histogram
+    final_hist = compute_hist(n_bins, results_round_one, normalize_hist)
+    log(INFO, f"Final histogram: {final_hist}")
 
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    # Aggregate partial histograms
-    aggregated_hist = aggregate_partial_histograms(replies)
-
-    # Display aggregated histogram
-    log(INFO, "Aggregated histogram: %s", aggregated_hist)
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
+    # Save final histogram
+    os.makedirs(os.path.dirname(path_to_save), exist_ok = True)
+    np.save(path_to_save, final_hist)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Generic functions
@@ -253,7 +262,6 @@ def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = N
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Min-max computation round functions (round 0)
 
-
 def compute_min_max_federation(results_round_zero: Iterable[Message]) -> tuple[float, float]:
     """
     Compute the global min and max from a list of local mins and maxs.
@@ -290,6 +298,46 @@ def compute_min_max_federation(results_round_zero: Iterable[Message]) -> tuple[f
         max_list.append(query_results["max"])
 
     return min(min_list), max(max_list)
+
+def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_hist : bool = False) -> np.ndarray:
+    """
+    Compute the final histogram from a list of client histograms.
+
+    Parameters
+    ----------
+    n_bins : int
+        Number of bins in the histogram.
+    results_round_one : Iterable[Message]
+        List of messages obtained form the clients. They must contain the local histograms.
+        See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
+    normalize_hist : bool, optional
+        If True, the final histogram will be normalized, by default False.
+        Normalization is done by dividing each bin by the total number of counts.
+        This will make the sum of all bins equal to 1.
+
+    Returns
+    -------
+    final_hist : np.ndarray
+        The final histogram.
+    """
+    
+    # Initialize final histogram
+    final_hist = np.zeros(n_bins, dtype = int)
+
+    for rep in results_round_one :
+        # Get query results
+        query_results = rep.content["query_results"]
+
+        # Get local histogram
+        local_hist = query_results["histogram"]
+
+        # Sum histograms
+        final_hist += np.array(local_hist)
+
+    # Normalize histogram if required
+    if normalize_hist : final_hist = final_hist / np.sum(final_hist)
+
+    return final_hist
 
 def aggregate_partial_histograms(messages: Iterable[Message]):
     """Aggregate partial histograms."""
