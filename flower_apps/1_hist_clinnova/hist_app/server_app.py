@@ -1,0 +1,316 @@
+"""
+A Flower `ServerApp` that constructs a histogram from clients data.
+
+@author: Alberto Zancanaro (Jesus)
+@organization: Luxembourg Centre for Systems Biomedicine (LCSB)
+@contact : alberto.zancanaro@uni.lu
+@date: September 2025
+"""
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Imports
+
+import random
+import time
+from collections.abc import Iterable
+from logging import INFO
+
+import numpy as np
+from flwr.common import Context, Message, MessageType, RecordDict, ConfigRecord
+from flwr.common.logger import log
+from flwr.server import Grid, ServerApp
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Flower ServerApp
+
+app = ServerApp()
+
+@app.main()
+def main(grid: Grid, context: Context) -> None:
+    """This `ServerApp` construct a histogram from partial-histograms reported by the
+    `ClientApp`s."""
+
+    # General settings
+    num_rounds = 2
+    min_nodes = context.run_config["min_nodes"] if 'min_nodes' in context.run_config else context.node_config['n_nodes']
+    max_number_of_attempts = context.run_config["max_number_of_attempts"] if 'max_number_of_attempts' in context.run_config else 10
+    
+    # Variable used to create the hist bins
+    max, min = None, None
+    n_bins = context.run_config['n_bins']
+    bins_variable = context.run_config['bins_variable']
+    class_to_filter = context.run_config['class_to_filter'] if 'class_to_filter' in context.run_config else None
+    
+    # Predefined min and max could be used. By default they are None
+    # If both are provided the round 0 for min-max computation will be skipped, otherwise the missing value will be computed
+    predefined_min = context.run_config['predefined_min'] if 'predefined_min' in context.run_config else None
+    predefined_max = context.run_config['predefined_max'] if 'predefined_max' in context.run_config else None
+    
+    # Dictionary used to communicate with the clients
+    my_config = dict(
+        server_round = -1,
+        min = min,
+        max = max,
+        n_bins = n_bins
+    )
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Min and max computation round (round 0)
+
+    if predefined_min is None or predefined_max is None :
+
+        log(INFO, "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        log(INFO, "START ROUND for min and max computation (round 0)")
+
+        # Update config for round 0
+        my_config['server_round'] = 0
+        
+        # Get all node ids
+        # Note that this id will be used both for round 0 and round 1
+        node_ids_round = get_node_ids(grid, min_nodes)
+        
+        # Send the messages and receive the results
+        results_round_zero = get_data_from_clients(grid, node_ids_round, my_config, max_number_of_attempts)
+
+        # Compute min and max and update config
+        min, max = compute_min_max_federation(results_round_zero)
+        
+        # Overwrite min or max if predefined values are provided
+        if predefined_min is not None : min = predefined_min
+        if predefined_max is not None : max = predefined_max
+
+    else :
+        min, max = predefined_min, predefined_max
+
+    log(INFO, f"Computed global min: {min}" if predefined_min is None else f"Using predefined min: {min}")
+    log(INFO, f"Computed global max: {max}" if predefined_max is None else f"Using predefined max: {max}")
+    log(INFO, "END ROUND for min and max computation (round 0)")
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Histogram computation rounds (round 1)
+
+    log(INFO, "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+    log(INFO, "START ROUND for histogram computation (round 1)")
+
+    bins = np.linspace(min, max, n_bins + 1)
+    log(INFO, f"Using bins: {bins}")
+
+    # Update config for round 1
+    my_config['min'] = min
+    my_config['max'] = max
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    # Aggregate partial histograms
+    aggregated_hist = aggregate_partial_histograms(replies)
+
+    # Display aggregated histogram
+    log(INFO, "Aggregated histogram: %s", aggregated_hist)
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Generic functions
+
+def get_node_ids(grid: Grid, min_nodes: int) -> list[int]:
+    """
+    Loop and wait until enough nodes are available.
+    
+    Parameters
+    ----------
+    grid : Grid
+        The Flower Grid instance.
+        See https://flower.ai/docs/framework/ref-api/flwr.serverapp.Grid.html for more details.
+    min_nodes : int
+        Minimum number of nodes required.
+
+    Returns
+    -------
+    list[int]
+        List of all node ids.
+    """
+    
+    # List for storing all node ids
+    all_node_ids : list[int] = []
+
+    # Loop until enough nodes are available
+    while len(all_node_ids) < min_nodes:
+        # Fetch all node ids
+        all_node_ids = list(grid.get_node_ids())
+
+        # If enough nodes are available, break the loop
+        if len(all_node_ids) >= min_nodes:
+            break
+
+        # If not enough nodes are available, wait and try again
+        log(INFO, "Waiting for nodes to connect...")
+        time.sleep(2)
+
+    return all_node_ids
+
+def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my_config : dict = None) :
+    """
+    Send messages to the specified node ids and wait for all results.
+
+    Parameters
+    ----------
+    grid : Grid
+        The Flower Grid instance.
+        See https://flower.ai/docs/framework/ref-api/flwr.serverapp.Grid.html for more details.
+    node_ids : list[int]
+        List of node ids to which send the messages.
+    server_round : int
+        The current server round.
+    my_config : dict, optional
+        Dictionary containing personal configuration to be sent to the clients, by default None.
+        If None, an empty dictionary will be sent.
+
+    Returns
+    -------
+    replies : list[Message] | None
+        The results obtained from the clients. They are instances of the Message class.
+        See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
+        If an error occurred, None is returned.
+    """
+    
+    # Create messages
+    messages = []
+    
+    # Add other information to message
+    recorddict = RecordDict()
+
+    # Add personal configuration to message
+    recorddict['my_config'] = ConfigRecord(my_config if my_config is not None else {})
+
+    for node_id in node_ids:  # one message for each node
+        message = Message(
+            content = recorddict,
+            message_type = MessageType.QUERY,
+            dst_node_id = node_id,
+            group_id = str(server_round),
+        )
+
+        messages.append(message)
+
+        # Some notes about the Message class
+        # The message_type can be one of the following : EVALUATE, QUERY, SYSTEM, TRAIN. Based on the type used, a different method will be called in the client.
+        # In this case we use QUERY, so the `query` method in ClientApp will be called (With the decorator implementation, it is the function decorated with @app.query).
+        # The group_id is used to group messages. In some settings, this is used as the federated learning round.
+        # From flower documentation : "The ID of the group to which this message is associated. In some settings, this is used as the federated learning round"
+
+    # Send messages and wait for all results
+    replies = grid.send_and_receive(messages)
+    log(INFO, "Received %s/%s results", len(replies), len(messages))
+    
+    # Check for errors
+    for rep in replies :
+        if rep.has_error():
+            return None
+
+    return replies
+
+def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = None, max_number_of_attempts : int = 10) :
+    """
+    Use the function `send_and_receive_data` to send messages to the clients and receive their results.
+    If an error occurs, the function will retry until the maximum number of attempts is reached.
+
+    Parameters
+    grid : Grid
+        The Flower Grid instance.
+        See https://flower.ai/docs/framework/ref-api/flwr.serverapp.Grid.html for more details.
+    node_ids : list[int]
+        List of node ids to which send the messages.
+    my_config : dict, optional
+        Dictionary containing personal configuration to be sent to the clients, by default None.
+        If None, an empty dictionary will be sent.
+    max_number_of_attempts : int, optional
+        Maximum number of attempts to send the messages and receive the results, by default 10.
+
+    Returns
+    -------
+    replies : list[Message]
+        The results obtained from the clients. They are instances of the Message class.
+        See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
+    """
+
+    n_attempts = 0
+    while (True) :
+        results_round_zero = send_and_receive_data(grid, node_ids, server_round = 0, my_config = my_config)
+
+        if results_round_zero is not None :
+            # If no error, break the loop
+            break
+        else :
+            n_attempts += 1
+            log(INFO, f"Error in receiving data from clients. Attempt {n_attempts}/{max_number_of_attempts}")
+            if n_attempts >= max_number_of_attempts :
+                raise Exception(f"Error in receiving data from clients during round {my_config['server_round']}. Maximum number of attempts ({max_number_of_attempts}) reached")
+            time.sleep(2)
+
+    return results_round_zero
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Min-max computation round functions (round 0)
+
+
+def compute_min_max_federation(results_round_zero: Iterable[Message]) -> tuple[float, float]:
+    """
+    Compute the global min and max from a list of local mins and maxs.
+
+    Parameters
+    ----------
+    results_round_zero : Iterable[Message]
+        List of messages obtained form the clients.
+        See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
+
+    Returns
+    -------
+    min : float
+        The global min.
+    max : float
+        The global max.
+    """
+    
+    # Lists for storing all local mins and maxs
+    min_list = []
+    max_list = []
+
+    for rep in results_round_zero :
+        # Get the content of the message
+        # Note that the key "query_results" is not a predefined key from the Flower framework. It is just a key used in the client app.
+        # If you want you could use whatever key you want, as long as it is the same in the client and server app.
+        query_results = rep.content["query_results"]
+
+        # The query_results is an istance of the MetricRecord class.
+        # See https://flower.ai/docs/framework/ref-api/flwr.common.MetricRecord.html for more details about the MetricRecord class.
+        
+        # Append local min and max to the lists
+        min_list.append(query_results["min"])
+        max_list.append(query_results["max"])
+
+    return min(min_list), max(max_list)
+
+def aggregate_partial_histograms(messages: Iterable[Message]):
+    """Aggregate partial histograms."""
+
+    aggregated_hist = {}
+    total_count = 0
+    for rep in messages:
+        if rep.has_error():
+            continue
+        query_results = rep.content["query_results"]
+        # Sum metrics
+        for k, v in query_results.items():
+            if k in ["SepalLengthCm", "SepalWidthCm"]:
+                if k in aggregated_hist:
+                    aggregated_hist[k] += np.array(v)
+                else:
+                    aggregated_hist[k] = np.array(v)
+            if "_count" in k:
+                total_count += v
+
+    # Verify aggregated histogram adds up to total reported count
+    assert total_count == sum([sum(v) for v in aggregated_hist.values()])
+    return aggregated_hist
+

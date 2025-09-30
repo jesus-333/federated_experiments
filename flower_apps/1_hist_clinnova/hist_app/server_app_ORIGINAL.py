@@ -12,7 +12,6 @@ from flwr.server import Grid, ServerApp
 
 app = ServerApp()
 
-
 @app.main()
 def main(grid: Grid, context: Context) -> None:
     """This `ServerApp` construct a histogram from partial-histograms reported by the

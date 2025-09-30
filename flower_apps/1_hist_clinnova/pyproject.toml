@@ -31,6 +31,8 @@ clientapp = "pandas_example.client_app:app"
 [tool.flwr.app.config]
 num-server-rounds = 3
 fraction-sample = 1.0
+n_nodes = 2
+n_bins = 10
 
 [tool.flwr.federations]
 default = "local-simulation"
@@ -40,4 +42,5 @@ options.num-supernodes = 4
 
 [tool.flwr.federations.local-deployment]
 address = "127.0.0.1:9093"
-insecure = true
+insecure = true # To run with insecure connection
+# root-certificates = "certificates/ca.crt" # To run with TLS (secure) connection

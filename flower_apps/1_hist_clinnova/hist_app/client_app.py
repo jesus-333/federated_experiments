@@ -35,6 +35,20 @@ app = ClientApp()
 @app.query()
 def query(msg: Message, context: Context):
     """Construct histogram of local dataset and report to `ServerApp`."""
+    
+    """
+    Example of msg and context
+    Message(metadata=Metadata(run_id=8348619855088795003, message_id='f12007fe252d28bb0f86e7216a657c78588403b20763751b87d4d27a5835486f', src_node_id=1, dst_node_id=11631752601818482563, reply_to_message_id='', group_id='1', created_at=1759151430.732682, ttl=43200.0, message_type='query', delivered_at=''), content=RecordDict(
+      array_records={},
+      metric_records={},
+      config_records={}
+    ))
+    Context(run_id=8348619855088795003, node_id=11631752601818482563, node_config={'num-partitions': 2, 'partition-id': 1}, state=RecordDict(
+      array_records={},
+      metric_records={},
+      config_records={}
+    ), run_config={'num-server-rounds': 3, 'fraction-sample': 1.0})
+    """
 
     # Read the node_config to fetch data partition associated to this node
     partition_id = context.node_config["partition-id"]
@@ -55,4 +69,4 @@ def query(msg: Message, context: Context):
 
     reply_content = RecordDict({"query_results": MetricRecord(metrics)})
 
-    return Message(reply_content, reply_to=msg)
+    return Message(reply_content, reply_to = msg)
