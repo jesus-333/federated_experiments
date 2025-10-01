@@ -53,14 +53,15 @@ def main(grid: Grid, context: Context) -> None:
     predefined_max = server_config['predefined_max'] if 'predefined_max' in server_config else None
     
     # Path to save the final histogram
-    path_to_save = server_config['path_to_save'] if 'path_to_save' in server_config else './final_hist.npy'
+    path_to_save = server_config['path_to_save'] if 'path_to_save' in server_config else './results/'
     
     # Dictionary used to communicate with the clients
     my_config = dict(
         server_round = -1,
         bins_variable = bins_variable,
-        class_to_filter = class_to_filter,
     )
+
+    if class_to_filter is not None : my_config['class_to_filter'] = class_to_filter
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Min and max computation round (round 0)
@@ -106,7 +107,7 @@ def main(grid: Grid, context: Context) -> None:
 
     # Update config for round 1
     my_config['server_round'] = 1
-    my_config['bins'] = bins
+    my_config['bins'] = list(bins)
     
     # Get the partial histograms from the clients
     results_round_one = get_data_from_clients(grid, node_ids_round, my_config, max_number_of_attempts)
@@ -116,8 +117,8 @@ def main(grid: Grid, context: Context) -> None:
     log(INFO, f"Final histogram: {final_hist}")
 
     # Save final histogram
-    os.makedirs(os.path.dirname(path_to_save), exist_ok = True)
-    np.save(path_to_save, final_hist)
+    os.makedirs(path_to_save, exist_ok = True)
+    np.save(path_to_save + 'hist.npy', final_hist)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Generic functions
@@ -190,7 +191,8 @@ def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my
     recorddict = RecordDict()
 
     # Add personal configuration to message
-    recorddict['my_config'] = ConfigRecord(my_config if my_config is not None else {})
+    if my_config is not None : recorddict['my_config'] = ConfigRecord(my_config)
+    # recorddict['my_config'] = ConfigRecord(my_config if my_config is not None else {})
 
     for node_id in node_ids:  # one message for each node
         message = Message(
@@ -338,27 +340,3 @@ def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_h
     if normalize_hist : final_hist = final_hist / np.sum(final_hist)
 
     return final_hist
-
-def aggregate_partial_histograms(messages: Iterable[Message]):
-    """Aggregate partial histograms."""
-
-    aggregated_hist = {}
-    total_count = 0
-    for rep in messages:
-        if rep.has_error():
-            continue
-        query_results = rep.content["query_results"]
-        # Sum metrics
-        for k, v in query_results.items():
-            if k in ["SepalLengthCm", "SepalWidthCm"]:
-                if k in aggregated_hist:
-                    aggregated_hist[k] += np.array(v)
-                else:
-                    aggregated_hist[k] = np.array(v)
-            if "_count" in k:
-                total_count += v
-
-    # Verify aggregated histogram adds up to total reported count
-    assert total_count == sum([sum(v) for v in aggregated_hist.values()])
-    return aggregated_hist
-

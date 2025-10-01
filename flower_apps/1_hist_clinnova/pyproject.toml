@@ -25,15 +25,11 @@ packages = ["."]
 publisher = "flwrlabs"
 
 [tool.flwr.app.components]
-serverapp = "pandas_example.server_app:app"
-clientapp = "pandas_example.client_app:app"
+serverapp = "hist_app.server_app:app"
+clientapp = "hist_app.client_app:app"
 
 [tool.flwr.app.config]
-path_server_config = './server_config.toml'
-num-server-rounds = 3
-fraction-sample = 1.0
-n_nodes = 2
-n_bins = 10
+path_server_config = './config/server_config.toml'
 
 [tool.flwr.federations]
 default = "local-simulation"
