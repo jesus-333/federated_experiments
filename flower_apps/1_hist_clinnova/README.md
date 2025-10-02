@@ -9,11 +9,14 @@ The work is inspired by a similar [flower tutorial](https://flower.ai/docs/examp
 This section contains a brief description of the folders and their files
 ## `hist_app`
 
-The `hist_app` folder contains the python implementation of the flower app
+The `hist_app` folder contains the python implementation of the flower app.
 
-## Script 
+-   `client\_app.py`. Implementation of the client. Provide the data required by the server for the computation.
+-   `server\_app.py`. Implementation of the server. Request the min and max for each client in the first round and use these values to compute unified bins for the federation. In the second round sends bins to clients, receives histograms back, and calculates the overall histogram.
 
-The `script` folder contains the scripts used to run the flower app for federated histogram computation
+## `Script`
+
+The `script` folder contains the scripts used to run the flower app for federated histogram computation.
 
 ### Python Scripts
 
