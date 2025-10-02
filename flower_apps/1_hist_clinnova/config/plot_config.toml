@@ -1,0 +1,10 @@
+figsize   = [10, 6]
+add_title = true
+edgecolor = 'black'
+alpha 	  = 0.7
+add_grid  = true
+show_plot = true
+
+path_save 		       = './results/hist_plot/'
+image_file_name 	   = 'hist_plot'
+image_file_format_list = ['.jpg', '.pdf']
