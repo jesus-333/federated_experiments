@@ -108,12 +108,13 @@ if 'path_save' in plot_config :
     # Save the plot in the specified formats
     for extension in plot_config['image_file_format_list'] :
         # Create the full path
-        full_path = f"{plot_config['path_save']}{plot_config['image_file_name']}{extension}"
+        full_path = f"{plot_config['path_save']}{plot_config['image_file_name']}.{extension}"
+
+        # Print info
+        print(f'Plot saved to {full_path}')
 
         # Save the figure
         fig.savefig(full_path, format = extension)
 
-        # Print info
-        print(f'Plot saved to {full_path}')
 
 

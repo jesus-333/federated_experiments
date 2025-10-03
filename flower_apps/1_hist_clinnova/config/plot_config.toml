@@ -7,4 +7,4 @@ show_plot = true
 
 path_save 		       = './results/hist_plot/'
 image_file_name 	   = 'hist_plot'
-image_file_format_list = ['.jpeg', '.pdf']
+image_file_format_list = ['png', 'pdf']
