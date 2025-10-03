@@ -14,8 +14,6 @@ from collections.abc import Iterable
 
 from flwr.client import ClientApp
 from flwr.common import Context, Message, MetricRecord, RecordDict
-from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # import warnings
