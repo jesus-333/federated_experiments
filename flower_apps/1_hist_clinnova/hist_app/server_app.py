@@ -12,6 +12,7 @@ A Flower `ServerApp` that constructs a histogram from clients data.
 
 import numpy as np
 import os
+import pickle
 import time
 import toml
 
@@ -113,12 +114,11 @@ def main(grid: Grid, context: Context) -> None:
     results_round_one = get_data_from_clients(grid, node_ids_round, my_config, max_number_of_attempts)
     
     # Compute final histogram
-    final_hist = compute_hist(n_bins, results_round_one, normalize_hist)
+    final_hist, samples_mean, samples_std, samples_count = compute_hist(n_bins, results_round_one, normalize_hist)
     log(INFO, f"Final histogram: {final_hist}")
 
-    # Save final histogram
-    os.makedirs(path_to_save, exist_ok = True)
-    np.save(path_to_save + 'hist.npy', final_hist)
+    # Save results
+    save_results(my_config, final_hist, samples_mean, samples_std, samples_count, path_to_save)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Generic functions
@@ -301,9 +301,10 @@ def compute_min_max_federation(results_round_zero: Iterable[Message]) -> tuple[f
 
     return min(min_list), max(max_list)
 
-def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_hist : bool = False) -> np.ndarray:
+def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_hist : bool = False) -> tuple[np.ndarray, float, float, int]:
     """
     Compute the final histogram from a list of client histograms.
+    It also compute the mean and std of the data, since the clients also send these values.
 
     Parameters
     ----------
@@ -321,10 +322,23 @@ def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_h
     -------
     final_hist : np.ndarray
         The final histogram.
+    samples_mean : float
+        The mean of the data. It is computed as the average of the means sent by the clients.
+    samples_std : float
+        The std of the data. It is computed as the average of the stds sent by the clients.
+    n_samples : int
+        The total number of samples used to compute the histogram.
     """
     
     # Initialize final histogram
     final_hist = np.zeros(n_bins, dtype = int)
+    
+    # Lists for storing all local means and stds
+    mean_list = []
+    std_list  = []
+
+    # Used to compute the weighted average of the mean and std
+    n_samples_list = []
 
     for rep in results_round_one :
         # Get query results
@@ -336,7 +350,45 @@ def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_h
         # Sum histograms
         final_hist += np.array(local_hist)
 
+        # Append local mean and std to the lists
+        mean_list.append(query_results["average"])
+        std_list.append(query_results["std"])
+
+        # Append number of samples to the list
+        n_samples_list.append(np.sum(local_hist))
+
+    # Compute mean and std of the data
+    # TODO Eventually implement the computation of the std as the pooled std (https://en.wikipedia.org/wiki/Pooled_variance)
+    samples_mean = np.average(mean_list, weights = n_samples_list)
+    samples_std  = np.average(std_list , weights = n_samples_list)
+
     # Normalize histogram if required
     if normalize_hist : final_hist = final_hist / np.sum(final_hist)
 
-    return final_hist
+    return final_hist, samples_mean, samples_std, np.sum(n_samples_list)
+
+def save_results(info_to_save : dict, final_hist : np.ndarray, samples_mean : float, samples_std : float, samples_count : int, path_to_save : str) -> None :
+    """
+    
+    """
+
+    # Add histogram and other info to the dictionary
+    info_to_save['histogram'] = final_hist
+    info_to_save['mean'] = samples_mean
+    info_to_save['std']  = samples_std
+    info_to_save['n_samples'] = samples_count
+    
+    # Create folder if it does not exist
+    os.makedirs(path_to_save, exist_ok = True)
+
+    # Save info file as a pickle
+    with open(path_to_save + 'results.pkl', 'wb') as f:
+        pickle.dump(info_to_save, f)
+
+    # Save info file as a toml
+    with open(path_to_save + 'results.toml', 'w') as f:
+        toml.dump(info_to_save, f)
+
+    # Save histogram and bins as numpy arrays
+    np.save(path_to_save + 'bins.npy', np.array(info_to_save['bins']))
+    np.save(path_to_save + 'hist.npy', final_hist)
