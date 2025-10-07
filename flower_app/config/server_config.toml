@@ -4,4 +4,3 @@ n_bins = 10
 bins_variable = 'Age'
 normalize_hist = true
 path_to_save = './results/'
-

@@ -2,5 +2,5 @@
 *.DS_Store
 *.pyc
 *.csv
-flower_apps/1_hist_clinnova/certificates
-flower_apps/1_hist_clinnova/results
+flower_app/certificates
+flower_app/results

@@ -1,3 +1,1 @@
-# Federated XGBoost Experiments
-
-Test with XGBoost in federated enviroment with the flower framework 
+This folder contains several examples that I downloaded and put here for easy reference.
