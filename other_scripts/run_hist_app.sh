@@ -19,7 +19,7 @@ flwr run --stream --run-config "path_server_config=\"${path_server_config}\"" ./
 
 # Download the results
 # (Temporary solution. In future the flwr pull command )
-rsync -avzh -e "ssh -p 8022" clinnova_vm_server:./test_server_app/results/ ${path_to_save_results}
+# rsync -avzh -e "ssh -p 8022" clinnova_vm_server:./test_server_app/results/ ${path_to_save_results}
 
 # Plot the results
-python ./scripts/plot_results.py --path_results_file "${path_to_save_results}results.pkl" --path_plot_config ${path_plot_config}
+# python ./other_scripts/plot_results.py --path_results_file "${path_to_save_results}results.pkl" --path_plot_config ${path_plot_config}
