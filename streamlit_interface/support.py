@@ -9,6 +9,8 @@ Support function used for the streamlit interface
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Imports
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pickle
 import toml
@@ -84,9 +86,8 @@ def build_hist_computation_options() :
     st.write("---")
 
     compute_hist_button = st.button(
-        label = "Compute Histogram",
-        key = "compute_hist_button",
-        on_click = compute_hist,
+        label = "Save Histogram",
+        key = "save_hist_button",
     )
 
     config_dict = dict(
@@ -100,15 +101,30 @@ def build_hist_computation_options() :
 
     return config_dict
 
-def build_hist_plot_options_matplotlib() :
-    add_grid = st.checkbox('Display Grid', key = 'add_grid', value = True)
-    add_edge = st.checkbox('Display edge', key = 'add_edge', value = True)
-    alpha = st.slider("Alpha", min_value = 0., max_value = 1., step = 0.05)
+def build_hist_plot_options_matplotlib(streamlit_container) :
     color = st.selectbox(
         label = "Select color",
         options = get_color_hex(), index = 0,
         format_func = get_color_name_from_hex,
-        key = 'color'
+        key = 'color',
+    )
+
+    checkbox_col_1, checkbox_col_2 = st.columns([0.5, 0.5])
+
+    with checkbox_col_1 :
+        add_grid = st.checkbox('Display Grid', key = 'add_grid', value = True)
+        add_edge = st.checkbox('Display edge', key = 'add_edge', value = True)
+
+    with checkbox_col_2 :
+        add_mean = st.checkbox('Display Mean', key = 'add_mean', value = False)
+        add_std = st.checkbox('Display Std', key = 'add_std', value = False)
+
+    alpha = st.slider("Alpha", min_value = 0.5, max_value = 1., value = 1., step = 0.05, key = 'alpha')
+
+    compute_hist_button = st.button(
+        label = "Compute Histogram",
+        key = "compute_hist_buttonAA",
+        on_click = draw_hist_matplotlib(streamlit_container),
     )
 
     plot_config_dict = dict(
@@ -120,13 +136,13 @@ def build_hist_plot_options_matplotlib() :
 
     return plot_config_dict
 
-def build_hist_plot_options_streamlit() :
+def build_hist_plot_options_streamlit(streamlit_container) :
     color = st.selectbox(
         label = "Select color",
         options = get_color_hex(), index = 0,
         format_func = get_color_name_from_hex,
         key = 'color',
-        on_change = draw_hist
+        on_change = draw_hist_streamlit(streamlit_container)
     )
 
     plot_config_dict = dict(
@@ -158,7 +174,7 @@ def compute_hist() :
 
     subprocess.call(['sh', './other_scripts/run_hist_app.sh'])
 
-    draw_hist()
+    draw_hist_streamlit()
 
 def compute_hist_OLD() :
     from subprocess import Popen, PIPE, STDOUT
@@ -205,7 +221,76 @@ def load_data_for_plotting() :
 
     return results
 
-def draw_hist() :
+def create_hist_matplotlib(results : dict) :
+    
+    # Get data from results dict
+    labels = results['labels']
+    bins = np.asarray(results['bins'])
+    histogram = results['histogram']
+    
+    # Compute width
+    width = (bins[1] - bins[0])
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize = (12, 6))
+
+    # Plot histogram
+    ax.bar(bins[:-1], histogram,
+        width = width, align = 'edge',
+        edgecolor = 'black' if st.session_state.add_edge else None,
+        color = st.session_state.color, alpha = st.session_state.alpha,
+    )
+
+    # (OPTIONAL) Add mean line
+    if st.session_state.add_mean :
+        ax.axvline(results['mean'], color = 'red', linestyle = 'dashed', linewidth = 1)
+        ax.text(results['mean'] * 1.05, max(histogram) * 0.9, f'Mean: {results["mean"]:.2f}', color = 'red')
+
+    # (OPTIONAL) Add std lines as shaded area
+    if st.session_state.add_std :
+        ax.axvline(results['mean'] - results['std'], color = 'orange', linestyle = 'dashed', linewidth = 1)
+        ax.axvline(results['mean'] + results['std'], color = 'orange', linestyle = 'dashed', linewidth = 1)
+        ax.fill_betweenx([0, max(histogram) * 1.2], results['mean'] - results['std'], results['mean'] + results['std'], color = 'orange', alpha = 0.2)
+        ax.text((results['mean'] + results['std']) * 1.02, max(histogram) * 0.9, f'Std: {results["std"]:.2f}', color = 'orange')
+
+    # Add xticks
+    ax.set_xticks(bins)
+
+    # Add title and axis labels
+    ax.set_title(f'Mean: {results['mean']:.2f}, Std: {results['std']:.2f}, N: {results['n_samples']}')
+    ax.set_xlabel(results['bins_variable'])
+    if min(histogram) >= 0 and max(histogram) <= 1 :
+        ax.set_ylabel('Proportion of samples')
+    else :
+        ax.set_ylabel('Number of samples')
+
+    # Add Grid
+    if st.session_state.add_grid :
+        ax.set_axisbelow(True)
+        ax.grid(True)
+
+    # Adjust limits
+    # ax.set_xlim([min(bins) * 0.95, max(bins) * 1.02])
+    ax.set_ylim([0, max(histogram) * 1.1])
+
+
+    fig.tight_layout()
+
+    return fig, ax
+
+def draw_hist_matplotlib(streamlit_container) :
+    # Load the data
+    results = load_data_for_plotting()
+    
+    # Create the figure
+    fig, ax = create_hist_matplotlib(results)
+
+    # Draw the figure
+    with streamlit_container :
+        st.pyplot(fig)
+    
+
+def draw_hist_streamlit(streamlit_container) :
 
     results = load_data_for_plotting()
 
@@ -221,11 +306,13 @@ def draw_hist() :
         "histogram" : results['histogram'],
     })
 
-    st.bar_chart(
-        data = results,
-        x = 'labels', y = 'histogram',
-        x_label = x_label, y_label = y_label,
-        color = st.session_state.color,
-    )
+    with streamlit_container :
+
+        st.bar_chart(
+            data = results,
+            x = 'labels', y = 'histogram',
+            x_label = x_label, y_label = y_label,
+            color = st.session_state.color,
+        )
 
 
