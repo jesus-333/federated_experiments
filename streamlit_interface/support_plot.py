@@ -283,7 +283,8 @@ def get_color_hex() :
     color_hex = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
     # List without blue, orange and green (the first three colors of the default matplotlib color cycle)
-    # Used to avoid confusion when plotting multiple histograms with Type 3 plot
+    # Used to avoid confusion when plotting multiple histograms with Type 3 plot.
+    # In type 3 I used the default color cycle of matplotlib, which starts with blue, orange and green.
     color_hex = ['#17becf', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22']
 
     return color_hex
@@ -307,6 +308,8 @@ def get_color_name_from_hex(hex : str) :
 def load_data_for_plotting() -> dict :
     # Get the name of variable to use for the plot
     bins_variable = st.session_state.bins_variable
+
+    if ":" in bins_variable : bins_variable = bins_variable.split(":")[1].strip()
 
     # Get the type of plot
     plot_type = st.session_state.plot_type

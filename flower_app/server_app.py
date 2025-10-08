@@ -377,12 +377,17 @@ def save_results(label : str, info_to_save : dict, final_hist : np.ndarray, samp
     
     """
 
-    path_to_save = os.path.join(path_to_save, info_to_save['bins_variable'] + '/')
+    if ":" in info_to_save['bins_variable'] :
+        bins_variable_name = info_to_save['bins_variable'].split(":")[1].strip()
+    else :
+        bins_variable_name = info_to_save['bins_variable']
+
+    path_to_save = os.path.join(path_to_save, bins_variable_name + '/')
 
     # Add histogram and other info to the dictionary
-    info_to_save[f'histogram_{label}'] = final_hist
-    info_to_save[f'mean_{label}']      = samples_mean
-    info_to_save[f'std_{label}']       = samples_std
+    info_to_save['histogram'] = final_hist
+    info_to_save['mean']      = samples_mean
+    info_to_save['std']       = samples_std
     
     # Create folder if it does not exist
     os.makedirs(path_to_save, exist_ok = True)
