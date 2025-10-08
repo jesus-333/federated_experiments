@@ -27,13 +27,11 @@ column_proportions = [0.5, 0.5]
 # with st.sidebar :
 #     hist_computation_config = support.build_hist_computation_options()
 
-# hist_canvas = st.container()
-hist_canvas = st.columns([1])[0]
+# hist_canvas = st.container(key = 'hist_canvas')
+hist_canvas = st.columns([1], border = debug)[0]
 
 hist_computation_option_column, hist_plot_column = st.columns(column_proportions, border = debug, gap = column_gap)
 
-with hist_computation_option_column :
-    hist_computation_config = support.build_hist_computation_options()
 
 with hist_plot_column :
 
@@ -44,13 +42,21 @@ with hist_plot_column :
         on_change = None,
     )
 
-    bins_variable = st.selectbox(
+    st.write("Other options")
+    normalize_hist = st.checkbox('Normalize hist', key = 'normalize_hist', value = False)
+
+    plot_backend = st.selectbox(
         label = 'Select the plot backend',
         options = ['matplotlib', 'streamlit'], index = 0,
         key = 'plot_backend',
+        on_change = support.draw_hist,
+        args = [hist_canvas] 
     )
 
-    if bins_variable == 'matplotlib' :
+    if plot_backend == 'matplotlib' :
         plot_config = support.build_hist_plot_options_matplotlib(hist_canvas)
-    elif bins_variable == 'streamlit' :
+    elif plot_backend == 'streamlit' :
         plot_config = support.build_hist_plot_options_streamlit(hist_canvas)
+
+with hist_computation_option_column :
+    hist_computation_config = support.build_hist_computation_options(hist_canvas)

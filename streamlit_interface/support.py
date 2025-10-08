@@ -60,7 +60,7 @@ def save_txt_list(filepath : str, data : list[str]) -> None:
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def build_hist_computation_options() :
+def build_hist_computation_options(streamlit_container) :
     hist_variable = read_txt_list("./streamlit_interface/field_hist.txt")
 
     bins_variable = st.selectbox(
@@ -80,20 +80,16 @@ def build_hist_computation_options() :
     checkbox_node_1 = st.checkbox('Node 1', key = 'checkbox_node_1', value = True)
     checkbox_node_2 = st.checkbox('Node 2', key = 'checkbox_node_2', value = True)
 
-    st.write("Other options")
-    normalize_hist = st.checkbox('Normalize hist', key = 'normalize_hist', value = False)
-
-    st.write("---")
-
     compute_hist_button = st.button(
-        label = "Save Histogram",
-        key = "save_hist_button",
+        label    = "Compute Histogram",
+        key      = "compute_hist_button",
+        on_click = compute_hist,
+        args = [streamlit_container]
     )
 
     config_dict = dict(
         bins_variable = bins_variable,
         n_bins = n_bins,
-        normalize_hist = normalize_hist,
         checkbox_node_1 = checkbox_node_1,
         checkbox_node_2 = checkbox_node_2,
         histogram_computed = compute_hist_button
@@ -107,29 +103,32 @@ def build_hist_plot_options_matplotlib(streamlit_container) :
         options = get_color_hex(), index = 0,
         format_func = get_color_name_from_hex,
         key = 'color',
+        on_change = draw_hist,
+        args = [streamlit_container]
     )
 
     checkbox_col_1, checkbox_col_2 = st.columns([0.5, 0.5])
 
     with checkbox_col_1 :
-        add_grid = st.checkbox('Display Grid', key = 'add_grid', value = True)
-        add_edge = st.checkbox('Display edge', key = 'add_edge', value = True)
+        add_grid = st.checkbox('Display Grid', key = 'add_grid', value = True, on_change = draw_hist_matplotlib, args = [streamlit_container])
+        add_edge = st.checkbox('Display edge', key = 'add_edge', value = True, on_change = draw_hist_matplotlib, args = [streamlit_container])
 
     with checkbox_col_2 :
-        add_mean = st.checkbox('Display Mean', key = 'add_mean', value = False)
-        add_std = st.checkbox('Display Std', key = 'add_std', value = False)
+        add_mean = st.checkbox('Display Mean', key = 'add_mean', value = False, on_change = draw_hist_matplotlib, args = [streamlit_container])
+        add_std = st.checkbox('Display Std', key = 'add_std', value = False, on_change = draw_hist_matplotlib, args = [streamlit_container])
 
-    alpha = st.slider("Alpha", min_value = 0.5, max_value = 1., value = 1., step = 0.05, key = 'alpha')
+    alpha = st.slider("Alpha", min_value = 0.5, max_value = 1., value = 1., step = 0.05, key = 'alpha', on_change = draw_hist_matplotlib, args = [streamlit_container])
 
-    compute_hist_button = st.button(
-        label = "Compute Histogram",
-        key = "compute_hist_buttonAA",
-        on_click = draw_hist_matplotlib(streamlit_container),
+    save_hist_button = st.button(
+        label = "Save Histogram",
+        key = "save_hist_button",
     )
 
     plot_config_dict = dict(
         add_grid = add_grid,
         add_edge = add_edge,
+        add_mean = add_mean,
+        add_std = add_std,
         alpha = alpha,
         color = color,
     )
@@ -142,7 +141,8 @@ def build_hist_plot_options_streamlit(streamlit_container) :
         options = get_color_hex(), index = 0,
         format_func = get_color_name_from_hex,
         key = 'color',
-        on_change = draw_hist_streamlit(streamlit_container)
+        on_change = draw_hist_streamlit,
+        args= [streamlit_container]
     )
 
     plot_config_dict = dict(
@@ -161,7 +161,6 @@ def update_server_config() :
         max_number_of_attempts = 10,
         n_bins = st.session_state.n_bins,
         bins_variable = st.session_state.bins_variable,
-        normalize_hist = st.session_state.normalize_hist,
         path_to_save = './results/',
     )
 
@@ -169,12 +168,15 @@ def update_server_config() :
     with open('./config/server_config.toml', 'w') as toml_file:
         toml.dump(server_config, toml_file)
 
-def compute_hist() :
+def compute_hist(streamlit_container) :
     update_server_config()
 
     subprocess.call(['sh', './other_scripts/run_hist_app.sh'])
 
-    draw_hist_streamlit()
+    if st.session_state.plot_backend == 'matplotlib' :
+        draw_hist_matplotlib(streamlit_container)
+    elif st.session_state.plot_backend == 'streamlit' :
+        draw_hist_streamlit(streamlit_container)
 
 def compute_hist_OLD() :
     from subprocess import Popen, PIPE, STDOUT
@@ -221,6 +223,37 @@ def load_data_for_plotting() :
 
     return results
 
+def get_matplotlib_config() -> dict :
+    """
+    Get the matplotlib configuration from the streamlit session state.
+    If a configuration option is not set in the session state, a default value is used.
+
+    This function was created to avoid buggy behavior of streamlit when using.
+    It basically protects againsst the cases when one element of the UI is not created yet but its value is needed in the plotting function.
+    """
+
+    matplotlib_config = dict()
+
+    if 'color' not in st.session_state : matplotlib_config['color'] = '#1f77b4'
+    else : matplotlib_config['color'] = st.session_state.color
+
+    if 'add_grid' not in st.session_state : matplotlib_config['add_grid'] = True
+    else : matplotlib_config['add_grid'] = st.session_state.add_grid
+
+    if 'add_edge' not in st.session_state : matplotlib_config['add_edge'] = True
+    else : matplotlib_config['add_edge'] = st.session_state.add_edge
+
+    if 'add_mean' not in st.session_state : matplotlib_config['add_mean'] = False
+    else : matplotlib_config['add_mean'] = st.session_state.add_mean
+
+    if 'add_std' not in st.session_state : matplotlib_config['add_std'] = False
+    else : matplotlib_config['add_std'] = st.session_state.add_std
+
+    if 'alpha' not in st.session_state : matplotlib_config['alpha'] = 1.
+    else : matplotlib_config['alpha'] = st.session_state.alpha
+
+    return matplotlib_config
+
 def create_hist_matplotlib(results : dict) :
     
     # Get data from results dict
@@ -231,23 +264,26 @@ def create_hist_matplotlib(results : dict) :
     # Compute width
     width = (bins[1] - bins[0])
 
+    # Get matplotlib config
+    matplotlib_config = get_matplotlib_config()
+
     # Create the plot
     fig, ax = plt.subplots(figsize = (12, 6))
 
     # Plot histogram
     ax.bar(bins[:-1], histogram,
         width = width, align = 'edge',
-        edgecolor = 'black' if st.session_state.add_edge else None,
-        color = st.session_state.color, alpha = st.session_state.alpha,
+        edgecolor = 'black' if matplotlib_config['add_edge'] else None,
+        color = matplotlib_config['color'], alpha = matplotlib_config['alpha']
     )
 
     # (OPTIONAL) Add mean line
-    if st.session_state.add_mean :
+    if matplotlib_config['add_mean'] :
         ax.axvline(results['mean'], color = 'red', linestyle = 'dashed', linewidth = 1)
         ax.text(results['mean'] * 1.05, max(histogram) * 0.9, f'Mean: {results["mean"]:.2f}', color = 'red')
 
     # (OPTIONAL) Add std lines as shaded area
-    if st.session_state.add_std :
+    if matplotlib_config['add_std'] :
         ax.axvline(results['mean'] - results['std'], color = 'orange', linestyle = 'dashed', linewidth = 1)
         ax.axvline(results['mean'] + results['std'], color = 'orange', linestyle = 'dashed', linewidth = 1)
         ax.fill_betweenx([0, max(histogram) * 1.2], results['mean'] - results['std'], results['mean'] + results['std'], color = 'orange', alpha = 0.2)
@@ -265,7 +301,7 @@ def create_hist_matplotlib(results : dict) :
         ax.set_ylabel('Number of samples')
 
     # Add Grid
-    if st.session_state.add_grid :
+    if matplotlib_config['add_grid'] :
         ax.set_axisbelow(True)
         ax.grid(True)
 
@@ -277,6 +313,12 @@ def create_hist_matplotlib(results : dict) :
     fig.tight_layout()
 
     return fig, ax
+
+def draw_hist(streamlit_container : st.delta_generator.DeltaGenerator) :
+    if st.session_state.plot_backend == 'matplotlib' :
+        draw_hist_matplotlib(streamlit_container)
+    elif st.session_state.plot_backend == 'streamlit' :
+        draw_hist_streamlit(streamlit_container)
 
 def draw_hist_matplotlib(streamlit_container) :
     # Load the data
@@ -314,5 +356,3 @@ def draw_hist_streamlit(streamlit_container) :
             x_label = x_label, y_label = y_label,
             color = st.session_state.color,
         )
-
-
