@@ -40,13 +40,11 @@ def main(grid: Grid, context: Context) -> None:
     # General settings
     min_nodes              = server_config['min_nodes'] if 'min_nodes' in server_config else server_config['n_nodes']
     max_number_of_attempts = server_config['max_number_of_attempts'] if 'max_number_of_attempts' in server_config else 10
-    normalize_hist         = server_config['normalize_hist'] if 'normalize_hist' in server_config else False
     
     # Variable used to create the hist bins
     max, min = None, None
     n_bins = server_config['n_bins'] if 'n_bins' in server_config else 10
     bins_variable = server_config['bins_variable']
-    class_to_filter = server_config['class_to_filter'] if 'class_to_filter' in server_config else None
     
     # Predefined min and max could be used. By default they are None
     # If both are provided the round 0 for min-max computation will be skipped, otherwise the missing value will be computed
@@ -61,8 +59,6 @@ def main(grid: Grid, context: Context) -> None:
         server_round = -1,
         bins_variable = bins_variable,
     )
-
-    if class_to_filter is not None : my_config['class_to_filter'] = class_to_filter
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Min and max computation round (round 0)
@@ -114,11 +110,12 @@ def main(grid: Grid, context: Context) -> None:
     results_round_one = get_data_from_clients(grid, node_ids_round, my_config, max_number_of_attempts)
     
     # Compute final histogram
-    final_hist, samples_mean, samples_std, samples_count = compute_hist(n_bins, results_round_one, normalize_hist)
-    log(INFO, f"Final histogram: {final_hist}")
+    final_hist_per_label, samples_mean_per_label, samples_std_per_label = compute_hist(n_bins, results_round_one)
+    log(INFO, f"Final histogram (all samples): {final_hist_per_label['all']}")
 
     # Save results
-    save_results(my_config, final_hist, samples_mean, samples_std, samples_count, path_to_save)
+    for label in ['all', 'UC', 'CD', 'control'] :
+        save_results(label, my_config, final_hist_per_label[label], samples_mean_per_label[label], samples_std_per_label[label], path_to_save)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Generic functions
@@ -301,7 +298,7 @@ def compute_min_max_federation(results_round_zero: Iterable[Message]) -> tuple[f
 
     return min(min_list), max(max_list)
 
-def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_hist : bool = False) -> tuple[np.ndarray, float, float, int]:
+def compute_hist(n_bins : int, results_round_one: Iterable[Message]) -> tuple[dict[str, np.ndarray], dict[str, float], dict[str, float]]:
     """
     Compute the final histogram from a list of client histograms.
     It also compute the mean and std of the data, since the clients also send these values.
@@ -313,82 +310,91 @@ def compute_hist(n_bins : int, results_round_one: Iterable[Message], normalize_h
     results_round_one : Iterable[Message]
         List of messages obtained form the clients. They must contain the local histograms.
         See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
-    normalize_hist : bool, optional
-        If True, the final histogram will be normalized, by default False.
-        Normalization is done by dividing each bin by the total number of counts.
-        This will make the sum of all bins equal to 1.
 
     Returns
     -------
-    final_hist : np.ndarray
-        The final histogram.
-    samples_mean : float
-        The mean of the data. It is computed as the average of the means sent by the clients.
-    samples_std : float
-        The std of the data. It is computed as the average of the stds sent by the clients.
-    n_samples : int
-        The total number of samples used to compute the histogram.
+    final_hist_per_label : dict[str, np.ndarray]
+        Dictionary containing the final histogram for each label.
+        The keys are 'all', 'UC', 'CD', 'control'.
+    samples_mean_per_label : dict[str, float]
+        Dictionary containing the mean of the data for each label.
+        The keys are 'all', 'UC', 'CD', 'control'.
+    samples_std_per_label : dict[str, float]
+        Dictionary containing the std of the data for each label.
+        The keys are 'all', 'UC', 'CD', 'control'.
     """
     
-    # Initialize final histogram
-    final_hist = np.zeros(n_bins, dtype = int)
+    # Labels
+    labels_list = ['all', 'UC', 'CD', 'control']
     
-    # Lists for storing all local means and stds
-    mean_list = []
-    std_list  = []
+    # Variable to save the results
+    final_hist_per_label = dict()
+    samples_mean_per_label = dict()
+    samples_std_per_label = dict()
 
-    # Used to compute the weighted average of the mean and std
-    n_samples_list = []
+    for label in labels_list :
+        # Initialize final histogram
+        final_hist = np.zeros(n_bins, dtype = int)
+        
+        # Lists for storing all local means and stds
+        mean_list = []
+        std_list  = []
 
-    for rep in results_round_one :
-        # Get query results
-        query_results = rep.content["query_results"]
+        # Used to compute the weighted average of the mean and std
+        n_samples_list = []
 
-        # Get local histogram
-        local_hist = query_results["histogram"]
+        for rep in results_round_one :
+            # Get query results
+            query_results = rep.content["query_results"]
 
-        # Sum histograms
-        final_hist += np.array(local_hist)
+            # Get local histogram
+            local_hist = query_results[f"histogram_{label}"]
 
-        # Append local mean and std to the lists
-        mean_list.append(query_results["average"])
-        std_list.append(query_results["std"])
+            # Sum histograms
+            final_hist += np.array(local_hist)
 
-        # Append number of samples to the list
-        n_samples_list.append(np.sum(local_hist))
+            # Append local mean and std to the lists
+            mean_list.append(query_results[f"average_{label}"])
+            std_list.append(query_results[f"std_{label}"])
 
-    # Compute mean and std of the data
-    # TODO Eventually implement the computation of the std as the pooled std (https://en.wikipedia.org/wiki/Pooled_variance)
-    samples_mean = np.average(mean_list, weights = n_samples_list)
-    samples_std  = np.average(std_list , weights = n_samples_list)
+            # Append number of samples to the list
+            n_samples_list.append(np.sum(local_hist))
 
-    # Normalize histogram if required
-    if normalize_hist : final_hist = final_hist / np.sum(final_hist)
+        # Compute mean and std of the data
+        # TODO Eventually implement the computation of the std as the pooled std (https://en.wikipedia.org/wiki/Pooled_variance)
+        samples_mean = np.average(mean_list, weights = n_samples_list)
+        samples_std  = np.average(std_list , weights = n_samples_list)
 
-    return final_hist, samples_mean, samples_std, np.sum(n_samples_list)
+        # Save results
+        final_hist_per_label[label]   = final_hist
+        samples_mean_per_label[label] = samples_mean
+        samples_std_per_label[label]  = samples_std
 
-def save_results(info_to_save : dict, final_hist : np.ndarray, samples_mean : float, samples_std : float, samples_count : int, path_to_save : str) -> None :
+    return final_hist_per_label, samples_mean_per_label, samples_std_per_label
+
+def save_results(label : str, info_to_save : dict, final_hist : np.ndarray, samples_mean : float, samples_std : float, path_to_save : str) -> None :
     """
     
     """
+
+    path_to_save = os.path.join(path_to_save, info_to_save['bins_variable'] + '/')
 
     # Add histogram and other info to the dictionary
-    info_to_save['histogram'] = final_hist
-    info_to_save['mean'] = samples_mean
-    info_to_save['std']  = samples_std
-    info_to_save['n_samples'] = samples_count
+    info_to_save[f'histogram_{label}'] = final_hist
+    info_to_save[f'mean_{label}']      = samples_mean
+    info_to_save[f'std_{label}']       = samples_std
     
     # Create folder if it does not exist
     os.makedirs(path_to_save, exist_ok = True)
 
     # Save info file as a pickle
-    with open(path_to_save + 'results.pkl', 'wb') as f:
+    with open(path_to_save + f'results_{label}.pkl', 'wb') as f:
         pickle.dump(info_to_save, f)
 
     # Save info file as a toml
-    with open(path_to_save + 'results.toml', 'w') as f:
+    with open(path_to_save + f'results_{label}.toml', 'w') as f:
         toml.dump(info_to_save, f)
 
     # Save histogram and bins as numpy arrays
-    np.save(path_to_save + 'bins.npy', np.array(info_to_save['bins']))
-    np.save(path_to_save + 'hist.npy', final_hist)
+    np.save(path_to_save + f'bins_{label}.npy', np.array(info_to_save['bins']))
+    np.save(path_to_save + f'hist_{label}.npy', final_hist)

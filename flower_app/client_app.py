@@ -51,17 +51,19 @@ def query(msg : Message, context : Context):
     my_config       = msg.content.config_records["my_config"]
     server_round    = my_config["server_round"]
     bins_variable   = my_config["bins_variable"]
-    class_to_filter = my_config["class_to_filter"] if "class_to_filter" in my_config else None
     
     # Get the dataset
-    data_hist, labels_per_sample = get_data(partition_id, path_client_data, bins_variable, class_to_filter)
+    data_hist_all, _     = get_data(partition_id, path_client_data, bins_variable)
+    data_hist_UC, _      = get_data(partition_id, path_client_data, bins_variable, 'UC')
+    data_hist_CD, _      = get_data(partition_id, path_client_data, bins_variable, 'CD')
+    data_hist_control, _ = get_data(partition_id, path_client_data, bins_variable, 'Control')
 
     query_results = {}
 
     if server_round == 0 :
         # Min-max computation
-        query_results["min"] = np.min(data_hist).item()
-        query_results["max"] = np.max(data_hist).item()
+        query_results["min"] = np.min(data_hist_all).item()
+        query_results["max"] = np.max(data_hist_all).item()
     elif server_round == 1 :
         # Histogram computation
 
@@ -69,14 +71,26 @@ def query(msg : Message, context : Context):
         bins = my_config["bins"]
 
         # Compute histogram
-        freqs, _ = np.histogram(data_hist, bins = bins)
+        freqs_all, _     = np.histogram(data_hist_all, bins = bins)
+        freqs_UC, _      = np.histogram(data_hist_UC, bins = bins)
+        freqs_CD, _      = np.histogram(data_hist_CD, bins = bins)
+        freqs_control, _ = np.histogram(data_hist_control, bins = bins)
     
         # Save the histogram
-        query_results["histogram"] = freqs.tolist()
-    
+        query_results["histogram_all"]     = freqs_all.tolist()
+        query_results["histogram_UC"]      = freqs_UC.tolist()
+        query_results["histogram_CD"]      = freqs_CD.tolist()
+        query_results["histogram_control"] = freqs_control.tolist()
+
         # Save average and std
-        query_results["average"] = np.mean(data_hist).item()
-        query_results["std"]     = np.std(data_hist).item()
+        query_results["average_all"]     = np.mean(data_hist_all).item()
+        query_results["std_all"]         = np.std(data_hist_all).item()
+        query_results["average_UC"]      = np.mean(data_hist_UC).item()
+        query_results["std_UC"]          = np.std(data_hist_UC).item()
+        query_results["average_CD"]      = np.mean(data_hist_CD).item()
+        query_results["std_CD"]          = np.std(data_hist_CD).item()
+        query_results["average_control"] = np.mean(data_hist_control).item()
+        query_results["std_control"]     = np.std(data_hist_control).item()
     else :
         raise ValueError(f"Server round {server_round} not supported.")
 
@@ -86,7 +100,7 @@ def query(msg : Message, context : Context):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def get_data(partition_id : int, path_client_data : str, bins_variable : str, class_to_filter : Iterable[str] = None) -> tuple[np.ndarray, np.ndarray]:
+def get_data(partition_id : int, path_client_data : str, bins_variable : str, class_to_filter : str = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Load the data for a specific client from a CSV file.
 
@@ -98,8 +112,8 @@ def get_data(partition_id : int, path_client_data : str, bins_variable : str, cl
         The path to the CSV file containing the client data.
     bins_variable : str
         The name of the column containing the histogram data.
-    class_to_filter : Iterable[str], optional
-        The classes to keep in the data. If None, all classes are kept. Default is None.
+    class_to_filter : str
+        The class to keep in the data. If None, all classes are kept. Default is None.
 
     Returns
     -------
@@ -109,7 +123,6 @@ def get_data(partition_id : int, path_client_data : str, bins_variable : str, cl
             The histogram data for the specified client.
         - labels_per_sample : np.ndarray
             The labels for each sample in the histogram data.
-
     """
     
     # Load the dataset and get the data
@@ -123,12 +136,7 @@ def get_data(partition_id : int, path_client_data : str, bins_variable : str, cl
     if class_to_filter is not None :
         
         # Create a boolean index to keep only the specified classes
-        idx_to_keep = np.ones(len(data_hist)) == 0
-
-        # Loop over the classes to keep
-        for label in class_to_filter :
-            tmp_idx = labels_per_sample == label
-            idx_to_keep = np.logical_or(idx_to_keep, tmp_idx)
+        idx_to_keep = labels_per_sample == class_to_filter
 
         # Filter the data and labels
         data_hist = data_hist[idx_to_keep]
