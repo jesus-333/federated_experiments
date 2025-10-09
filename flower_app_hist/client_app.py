@@ -41,7 +41,7 @@ def query(msg : Message, context : Context):
     """
 
     # Get config (node_config)
-    partition_id = context.node_config["partition-id"]
+    # partition_id = context.node_config["partition-id"]
     path_client_data = context.node_config["path_client_data"]
 
     # Remember that the node config is passed as an argument of flower-supernode command.
@@ -53,10 +53,10 @@ def query(msg : Message, context : Context):
     bins_variable   = my_config["bins_variable"]
     
     # Get the dataset
-    data_hist_all, _     = get_data(partition_id, path_client_data, bins_variable)
-    data_hist_UC, _      = get_data(partition_id, path_client_data, bins_variable, 'UC')
-    data_hist_CD, _      = get_data(partition_id, path_client_data, bins_variable, 'CD')
-    data_hist_control, _ = get_data(partition_id, path_client_data, bins_variable, 'Control')
+    data_hist_all, _     = get_data(path_client_data, bins_variable)
+    data_hist_UC, _      = get_data(path_client_data, bins_variable, 'UC')
+    data_hist_CD, _      = get_data(path_client_data, bins_variable, 'CD')
+    data_hist_control, _ = get_data(path_client_data, bins_variable, 'Control')
 
     query_results = {}
 
@@ -100,14 +100,12 @@ def query(msg : Message, context : Context):
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def get_data(partition_id : int, path_client_data : str, bins_variable : str, class_to_filter : str = None) -> tuple[np.ndarray, np.ndarray]:
+def get_data(path_client_data : str, bins_variable : str, class_to_filter : str = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Load the data for a specific client from a CSV file.
 
     Parameters
     ----------
-    partition_id : int
-        The ID of the client (partition) to load the data for.
     path_client_data : str
         The path to the CSV file containing the client data.
     bins_variable : str

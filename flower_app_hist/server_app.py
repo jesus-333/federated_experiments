@@ -170,7 +170,7 @@ def get_node_ids(grid: Grid, min_nodes: int) -> list[int]:
 
     return all_node_ids
 
-def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my_config : dict = None) :
+def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my_config : dict = None) -> list[Message] | None:
     """
     Send messages to the specified node ids and wait for all results.
 
@@ -232,7 +232,7 @@ def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my
 
     return replies
 
-def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = None, max_number_of_attempts : int = 10) :
+def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = None, max_number_of_attempts : int = 10) -> list[Message]:
     """
     Use the function `send_and_receive_data` to send messages to the clients and receive their results.
     If an error occurs, the function will retry until the maximum number of attempts is reached.
@@ -251,16 +251,16 @@ def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = N
 
     Returns
     -------
-    replies : list[Message]
+    results : list[Message]
         The results obtained from the clients. They are instances of the Message class.
         See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
     """
 
     n_attempts = 0
     while (True) :
-        results_round_zero = send_and_receive_data(grid, node_ids, server_round = 0, my_config = my_config)
+        results = send_and_receive_data(grid, node_ids, server_round = 0, my_config = my_config)
 
-        if results_round_zero is not None :
+        if results is not None :
             # If no error, break the loop
             break
         else :
@@ -270,7 +270,7 @@ def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = N
                 raise Exception(f"Error in receiving data from clients during round {my_config['server_round']}. Maximum number of attempts ({max_number_of_attempts}) reached")
             time.sleep(2)
 
-    return results_round_zero
+    return results
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Min-max computation round functions (round 0)
