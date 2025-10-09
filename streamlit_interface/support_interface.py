@@ -90,8 +90,8 @@ def build_hist_computation_options(streamlit_container) :
 
     with node_option_column :
         st.write("Node to use for the computation")
-        checkbox_node_1 = st.checkbox('Node 1', key = 'checkbox_node_1', value = True)
-        checkbox_node_2 = st.checkbox('Node 2', key = 'checkbox_node_2', value = True)
+        checkbox_node_1 = st.checkbox('Client 1', key = 'checkbox_node_1', value = True)
+        checkbox_node_2 = st.checkbox('Client 2', key = 'checkbox_node_2', value = True)
 
     compute_hist_button = st.button(
         label    = "Compute Histogram",
