@@ -44,7 +44,6 @@ def main(grid: Grid, context: Context) -> None:
     # Variable used to create the hist bins
     max, min = None, None
     n_bins = server_config['n_bins'] if 'n_bins' in server_config else 10
-    bins_variable = server_config['bins_variable']
     
     # Predefined min and max could be used. By default they are None
     # If both are provided the round 0 for min-max computation will be skipped, otherwise the missing value will be computed
@@ -57,7 +56,8 @@ def main(grid: Grid, context: Context) -> None:
     # Dictionary used to communicate with the clients
     my_config = dict(
         server_round = -1,
-        bins_variable = bins_variable,
+        bins_variable = server_config['bins_variable'],
+        bins_distribution = server_config['bins_distribution'] if 'bins_distribution' in server_config else 'uniform'
     )
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -99,7 +99,21 @@ def main(grid: Grid, context: Context) -> None:
     log(INFO, "START ROUND for histogram computation (round 1)")
     
     # Compute bins
-    bins = np.linspace(min, max, n_bins + 1)
+    if my_config['bins_distribution'] == 'uniform' :
+        bins = np.linspace(min, max, n_bins + 1)
+    elif my_config['bins_distribution'] == 'logarithmic' :
+        if min == 0 : 
+            # Avoid issues with log scale if min is 0
+            min = 1e-10
+            bins = np.geomspace(min, max, n_bins + 1)
+        elif min < 0 and max > 0 :
+            # Avoid issues with log scale if min is negative and max is positive
+            # TODO Eventually implement a solution for this case
+            # Not necessary fot the PoC since the min value in all dataset, in the worst case, is 0
+            pass
+        else :
+            bins = np.geomspace(min, max, n_bins + 1)
+
     log(INFO, f"Using bins: {bins}")
 
     # Update config for round 1

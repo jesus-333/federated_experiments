@@ -74,9 +74,24 @@ def build_hist_computation_options(streamlit_container) :
         key = 'n_bins',
     )
 
-    st.write("Node to use for the computation")
-    checkbox_node_1 = st.checkbox('Node 1', key = 'checkbox_node_1', value = True)
-    checkbox_node_2 = st.checkbox('Node 2', key = 'checkbox_node_2', value = True)
+    column_proportions = [0.5, 0.5]
+    node_option_column, bins_options_column = st.columns(column_proportions)
+
+    with bins_options_column :
+        st.radio(
+            label = "Bins Distribution",
+            options = ["Uniform", "Logarithmic"],
+            captions = [
+                "Bins are evenly distributed between min and max",
+                "bins are logarithmically distributed between min and max"
+            ],
+            key = 'bins_distribution',
+        )
+
+    with node_option_column :
+        st.write("Node to use for the computation")
+        checkbox_node_1 = st.checkbox('Node 1', key = 'checkbox_node_1', value = True)
+        checkbox_node_2 = st.checkbox('Node 2', key = 'checkbox_node_2', value = True)
 
     compute_hist_button = st.button(
         label    = "Compute Histogram",
@@ -117,7 +132,13 @@ def build_hist_plot_options(streamlit_container_for_the_plot) :
     )
 
     st.write("Other options")
-    st.checkbox('Normalize hist', key = 'normalize_hist', value = False)
+    st.checkbox(
+        label = 'Normalize hist',
+        key = 'normalize_hist',
+        value = False,
+        on_change = support_plot.draw_hist,
+        args = [streamlit_container_for_the_plot]
+    )
 
     st.selectbox(
         label = "Select color",
@@ -133,34 +154,40 @@ def build_hist_plot_options(streamlit_container_for_the_plot) :
     elif plot_backend == 'streamlit' :
         pass
 
-def build_hist_plot_options_matplotlib(streamlit_container) :
+def build_hist_plot_options_matplotlib(streamlit_container_for_the_plot) :
+
+    st.slider(label = "Alpha", key = 'alpha',
+              min_value = 0.5, max_value = 1., value = 1., step = 0.05,
+              on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
+              )
 
     checkbox_col_1, checkbox_col_2 = st.columns([0.5, 0.5])
 
     with checkbox_col_1 :
-        add_grid = st.checkbox('Display Grid', key = 'add_grid', value = True, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container])
-        add_edge = st.checkbox('Display edge', key = 'add_edge', value = True, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container])
+        st.checkbox('Display Grid', key = 'add_grid', value = True, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot])
+        st.checkbox('Display edge', key = 'add_edge', value = True, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot])
 
     with checkbox_col_2 :
-        add_mean = st.checkbox('Display Mean', key = 'add_mean', value = False, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container])
-        add_std = st.checkbox('Display Std', key = 'add_std', value = False, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container])
+        st.checkbox(
+            label = 'Display Mean', key = 'add_mean', value = False,
+            on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
+        )
 
-    alpha = st.slider("Alpha", min_value = 0.5, max_value = 1., value = 1., step = 0.05, key = 'alpha', on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container])
+        st.checkbox(
+            label = 'Display Std', key = 'add_std', value = False,
+            on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
+        )
+
+        st.checkbox(
+            label = 'Log scale y axis', key = 'y_axis_log', value = False,
+            on_change = support_plot.draw_hist, args = [streamlit_container_for_the_plot]
+        )
+
 
     st.button(
         label = "Save Histogram",
         key = "save_hist_button",
     )
-
-    plot_config_dict = dict(
-        add_grid = add_grid,
-        add_edge = add_edge,
-        add_mean = add_mean,
-        add_std = add_std,
-        alpha = alpha,
-    )
-
-    return plot_config_dict
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Histogram computation
@@ -172,6 +199,7 @@ def update_server_config() :
         max_number_of_attempts = 10,
         n_bins = st.session_state.n_bins,
         bins_variable = st.session_state.bins_variable,
+        bins_distribution = st.session_state.bins_distribution.lower(),
         path_to_save = './results/',
     )
 

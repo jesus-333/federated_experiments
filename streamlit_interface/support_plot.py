@@ -55,11 +55,20 @@ def get_matplotlib_config() -> dict :
 
     matplotlib_config = dict()
 
+    if 'bins_distribution' not in st.session_state : matplotlib_config['bins_distribution'] = 'uniform'
+    else : matplotlib_config['bins_distribution'] = st.session_state.bins_distribution.lower()
+
     if 'plot_type' not in st.session_state : matplotlib_config['plot_type'] = "Type 1"
     else : matplotlib_config['plot_type'] = st.session_state.plot_type
+    
+    if 'normalize_hist' not in st.session_state : matplotlib_config['normalize_hist'] = False
+    else : matplotlib_config['normalize_hist'] = st.session_state.normalize_hist
 
     if 'color' not in st.session_state : matplotlib_config['color'] = '#1f77b4'
     else : matplotlib_config['color'] = st.session_state.color
+
+    if 'alpha' not in st.session_state : matplotlib_config['alpha'] = 1.
+    else : matplotlib_config['alpha'] = st.session_state.alpha
 
     if 'add_grid' not in st.session_state : matplotlib_config['add_grid'] = True
     else : matplotlib_config['add_grid'] = st.session_state.add_grid
@@ -73,15 +82,14 @@ def get_matplotlib_config() -> dict :
     if 'add_std' not in st.session_state : matplotlib_config['add_std'] = False
     else : matplotlib_config['add_std'] = st.session_state.add_std
 
-    if 'alpha' not in st.session_state : matplotlib_config['alpha'] = 1.
-    else : matplotlib_config['alpha'] = st.session_state.alpha
+    if 'y_axis_log' not in st.session_state : matplotlib_config['y_axis_log'] = False
+    else : matplotlib_config['y_axis_log'] = st.session_state.y_axis_log
 
     return matplotlib_config
 
 def create_hist_matplotlib(results : dict, matplotlib_config : dict) :
     # Get data from results dict
     # labels = results['labels']
-    
 
     # Create the plot
     fig, ax = plt.subplots(figsize = (18, 5))
@@ -89,10 +97,11 @@ def create_hist_matplotlib(results : dict, matplotlib_config : dict) :
     # Plot histogram
     if matplotlib_config['plot_type'] == 'Type 1' :
         histogram = results['histogram']
+        if matplotlib_config['normalize_hist'] : histogram = histogram / np.sum(histogram)
         bins = np.asarray(results['bins'])
         
         # Plot the data
-        ax = plot_data_inside_ax(ax, bins, histogram, matplotlib_config['color'], matplotlib_config['add_edge'], matplotlib_config['alpha'])
+        ax = plot_data_inside_ax(ax, bins, histogram, matplotlib_config)
 
         # Beautify the plot
         fig, ax = beautify_hist_matplotlib(fig, ax, results, histogram, bins, matplotlib_config)
@@ -106,10 +115,11 @@ def create_hist_matplotlib(results : dict, matplotlib_config : dict) :
             # Get the data for the current class
             results_for_the_class = results[f'results_{class_to_plot}']
             histogram = results_for_the_class['histogram']
+            if matplotlib_config['normalize_hist'] : histogram = histogram / np.sum(histogram)
             bins = np.asarray(results_for_the_class['bins'])
 
             # Plot the data
-            axs[i] = plot_data_inside_ax(axs[i], bins, histogram, matplotlib_config['color'], matplotlib_config['add_edge'], matplotlib_config['alpha'])
+            axs[i] = plot_data_inside_ax(axs[i], bins, histogram, matplotlib_config, label = class_to_plot)
             axs[i].set_title(f'{class_to_plot}')
 
             # Beautify the plot
@@ -117,6 +127,7 @@ def create_hist_matplotlib(results : dict, matplotlib_config : dict) :
 
     elif matplotlib_config['plot_type'] == 'Type 3' :
         fig, ax = plt.subplots(1, 1, figsize = (18, 5))
+        del matplotlib_config['color'] # Remove color from the config to use default matplotlib color cycle
     
         class_list = ['UC', 'CD', 'control']
         total_bottom = np.zeros(len(results['results_UC']['histogram']))
@@ -126,10 +137,11 @@ def create_hist_matplotlib(results : dict, matplotlib_config : dict) :
             # Get the data for the current class
             results_for_the_class = results[f'results_{class_to_plot}']
             histogram = results_for_the_class['histogram']
+            if matplotlib_config['normalize_hist'] : histogram = histogram / np.sum(results['results_all']['histogram']) # Normalize by the total population
             bins = np.asarray(results_for_the_class['bins'])
 
             # Plot the data
-            ax = plot_data_inside_ax(ax, bins, histogram, None, matplotlib_config['add_edge'], matplotlib_config['alpha'], label = class_to_plot, bottom = total_bottom)
+            ax = plot_data_inside_ax(ax, bins, histogram, matplotlib_config, label = class_to_plot, bottom = total_bottom)
 
             total_bottom += histogram
 
@@ -137,20 +149,20 @@ def create_hist_matplotlib(results : dict, matplotlib_config : dict) :
         # Note that histogram is passed to the function to get the y-axis limits correctly.
         # Since we are stacking the histograms, the maximum value of the last histogram is not the maximum value of the stacked histogram.
         # Therefore, we pass the total_bottom to the function to get the correct y-axis limits (which is also the histogram of the total population).
-        fig, ax = beautify_hist_matplotlib(fig, ax, results_for_the_class, total_bottom, bins, matplotlib_config)
+        fig, ax = beautify_hist_matplotlib(fig, ax, results['results_all'], total_bottom, bins, matplotlib_config)
         ax.legend(title = 'Classes')
 
     return fig, ax
 
-def plot_data_inside_ax(ax : plt.Axes, bins : np.ndarray, histogram : np.ndarray, color : str, add_edge : bool, alpha : float, label : str = None, bottom = None) -> plt.Axes :
+def plot_data_inside_ax(ax : plt.Axes, bins : np.ndarray, histogram : np.ndarray, matplotlib_config : dict, label : str = None, bottom = None) -> plt.Axes :
     # Compute width
-    width = (bins[1] - bins[0])
+    width = np.diff(bins)
 
     # Plot hist
     ax.bar(bins[:-1], histogram,
            width = width, align = 'edge',
-           edgecolor = 'black' if add_edge else None,
-           color = color, alpha = alpha,
+           edgecolor = 'black' if matplotlib_config['add_edge'] else None,
+           color = matplotlib_config['color'] if 'color' in matplotlib_config else None, alpha = matplotlib_config['alpha'],
            label = label, bottom = bottom
            )
     return ax
@@ -182,6 +194,12 @@ def beautify_hist_matplotlib(fig : plt.Figure, ax : plt.Axes, results : dict, hi
         The matplotlib axes object.
     """
 
+    # (OPTIONAL) Normalize histogram and modify y-axis labels
+    if matplotlib_config['normalize_hist'] :
+        yticks_labels = [float(item.get_text()) for item in ax.get_yticklabels()]
+        yticks_labels = [f"{item * 100:.1f}%" for item in yticks_labels]
+        ax.set_yticklabels(yticks_labels)
+
     # (OPTIONAL) Add mean line
     if matplotlib_config['add_mean'] :
         ax.axvline(results['mean'], color = 'red', linestyle = 'dashed', linewidth = 1)
@@ -194,12 +212,22 @@ def beautify_hist_matplotlib(fig : plt.Figure, ax : plt.Axes, results : dict, hi
         ax.fill_betweenx([0, max(histogram) * 1.2], results['mean'] - results['std'], results['mean'] + results['std'], color = 'orange', alpha = 0.2)
         ax.text((results['mean'] + results['std']) * 1.02, max(histogram) * 0.9, f'Std: {results["std"]:.2f}', color = 'orange')
 
+
+    # Set x-axis scale
+    if matplotlib_config['bins_distribution'] == 'logarithmic' : ax.set_xscale('log')
+
     # Add xticks
     ax.set_xticks(bins)
+    ax.set_xticklabels(np.round(bins, 1))
 
-    # Add title and axis labels
+    # Add x-axis label
     ax.set_xlabel(results['bins_variable'])
-    if min(histogram) >= 0 and max(histogram) <= 1 :
+
+    # Set y-axis scale
+    if matplotlib_config['y_axis_log'] : ax.set_yscale('log')
+    
+    # Add y-axis label
+    if matplotlib_config['normalize_hist'] :
         ax.set_ylabel('Proportion of samples')
     else :
         ax.set_ylabel('Number of samples')
@@ -319,7 +347,7 @@ def load_data_for_plotting() -> dict :
 
         results = load_data_from_pkl_file(path_to_results)
     elif plot_type == 'Type 2' or plot_type == 'Type 3' :
-        class_list = ['UC', 'CD', 'control']
+        class_list = ['UC', 'CD', 'control', 'all']
 
         results = dict()
 
