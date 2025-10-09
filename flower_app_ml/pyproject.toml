@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Clinnova_Federated_Hist_PoC"
+version = "1.0.0"
+description = "Proof of Concept (PoC) for a computation of histograms in a federated environment"
+license = "Apache-2.0"
+authors = [
+    { name = "Alberto Zancanaro", email = "alberto.zancanaro@uni.lu" },
+]
+dependencies = [
+    "flwr[simulation]>=1.22.0",
+    "flwr-datasets[vision]>=0.5.0",
+    "numpy>=2.0.2",
+    "pandas==2.2.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "flwrlabs"
+
+[tool.flwr.app.components]
+serverapp = "server_app:app"
+clientapp = "client_app:app"
+
+[tool.flwr.app.config]
+path_server_config = './config/server_config.toml'
+
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 4
+
+[tool.flwr.federations.local-deployment]
+address = "127.0.0.1:9093"
+insecure = true # To run with insecure connection
+# root-certificates = "certificates/ca.crt" # To run with TLS (secure) connection
+
+[tool.flwr.federations.remote-hist]
+# address = "10.240.18.119:9093"
+address = "127.0.0.1:9093"
+insecure = true  # Disable TLS (not recommended for production)
