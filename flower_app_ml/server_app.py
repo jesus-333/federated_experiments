@@ -49,33 +49,32 @@ def main(grid: Grid, context: Context) -> None:
     # Path to save the final results
     path_to_save = server_config['path_to_save'] if 'path_to_save' in server_config else './results/'
 
-    # Get config for the ml algorithm
-    ml_model_config = server_config['ml_algorithm_config']
     
     # Dictionary used to communicate with the clients
-    my_config = dict(
-        ml_model_name = server_config['ml_model_name'],
-        ml_model_config = ml_model_config,
-        fields_to_use_for_train = fields_to_use_for_train
-    )
+    my_config = server_config['ml_algorithm_config'] 
+    my_config['ml_model_name'] = server_config['ml_model_name']
+    my_config['fields_to_use_for_the_train'] = fields_to_use_for_train
 
     # Create ml model
-    ml_model = support.get_ml_model(my_config['ml_model_name'], ml_model_config)
+    ml_model = support.get_ml_model(my_config['ml_model_name'], my_config)
     log(INFO, f"ML Model created: {ml_model}")
 
     # Setting initial parameters (it is required by flower) and convert them in an ArrayRecord representation
     support.set_initial_params(my_config['ml_model_name'], ml_model, 3, x_server.shape[1])
-    arrays = ArrayRecord(support.get_model_params(ml_model))
+    arrays = ArrayRecord(support.get_model_params(my_config['ml_model_name'], ml_model))
     
     # Create FL strategy
     fl_strategy = strategy.FedAvg()
+
+    # Create train config
+    train_config = ConfigRecord(config_dict = my_config)
     
     # Federated training
     result = fl_strategy.start(
         grid = grid,
         initial_arrays = arrays,
         num_rounds = server_config['num_rounds'],
-        train_config = ConfigRecord(my_config),
+        train_config = train_config
     )
     
     # Get the results
@@ -231,7 +230,7 @@ def get_model_weights_from_clients(grid: Grid, node_ids : list[int], my_config :
             n_attempts += 1
             log(INFO, f"Error in receiving data from clients. Attempt {n_attempts}/{max_number_of_attempts}")
             if n_attempts >= max_number_of_attempts :
-                raise Exception(f"Error in receiving data from clients during round {my_config['server_round']}. Maximum number of attempts ({max_number_of_attempts}) reached")
+                raise Exception(f"Error in receiving data from clients. Maximum number of attempts ({max_number_of_attempts}) reached")
             time.sleep(2)
 
     list_params_per_node = []
@@ -243,8 +242,17 @@ def get_model_weights_from_clients(grid: Grid, node_ids : list[int], my_config :
         query_results = rep.content["query_results"]
         
         # Get the model weights
-        params = query_results['model_weights']
-        list_params_per_node.append(params)
+        tmp_params = []
+        if my_config['ml_model_name'] == 'SVM' :
+            # Get the coefficients
+            # Note that for SVM the params are [coef, intercept], coef is of shape (n_classes, n_features)
+            tmp_coef = []
+            for i in range(len(query_results['coef'])) :
+                tmp_coef.append(np.array(query_results[f'coef_class_{i}']))
+            tmp_params.append(np.array(tmp_coef))
+
+            # Get the intercept
+            tmp_params.append(query_results['intercept'])
 
     return list_params_per_node
 

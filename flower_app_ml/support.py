@@ -21,19 +21,26 @@ from flwr.common import NDArrays
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def get_ml_model(ml_model_name : str, ml_model_config : dict) :
-    if ml_model_name == 'SVC' :
-        model = svm.SVC(kernel = ml_model_config['kernel'], max_iter = ml_model_config['max_iter'])
+    if ml_model_name == 'SVM' :
+        model = svm.LinearSVC(penalty = ml_model_config['penalty'],
+                              loss = ml_model_config['loss'],
+                              dual = ml_model_config['dual'],
+                              tol = ml_model_config['tol'],
+                              C = ml_model_config['C'],
+                              multi_class = ml_model_config['multi_class'],
+                              max_iter = ml_model_config['max_iter'],
+                              )
     else :
         raise ValueError(f"ML algorithm {ml_model_name} not implemented")
 
     return model
 
-def get_model_parameters(ml_model_name : str, ml_model) -> NDArrays:
+def get_model_params(ml_model_name : str, ml_model) -> NDArrays:
     """
     Return the parameters of a sklearn model
     """
 
-    if ml_model_name == 'SVC' :
+    if ml_model_name == 'SVM' :
         params = [
             ml_model.coef_,
             ml_model.intercept_,
@@ -48,7 +55,7 @@ def set_model_params(ml_model_name : str, ml_model, params: NDArrays) :
     Set the parameters of a sklean model
     """
 
-    if ml_model_name == 'SVC' :
+    if ml_model_name == 'SVM' :
         ml_model.coef_ = params[0]
         if ml_model.fit_intercept:
             ml_model.intercept_ = params[1]
@@ -68,7 +75,7 @@ def set_initial_params(ml_model_name : str, ml_model, n_classes : int, n_feature
     sklearn.linear_model.LogisticRegression documentation for more information.
     """
     
-    if ml_model_name == 'SVC' :
+    if ml_model_name == 'SVM' :
         # Setup the model classes
         ml_model.classes_ = np.array([i for i in range(n_classes)])
 
@@ -76,11 +83,14 @@ def set_initial_params(ml_model_name : str, ml_model, n_classes : int, n_feature
         intercept = np.zeros((n_classes,))
 
         initial_param = [coef, intercept]
+
+        x_fake = np.random.rand(5, n_features)
+        y_fake = np.random.randint(0, n_classes, 5)
+        ml_model.fit(x_fake, y_fake)
     elif ml_model_name == 'k-means' :
         initial_param = get_kmeans_initial_parameters()
     else:
         raise ValueError(f"ML algorithm {ml_model_name} not implemented")
-
     ml_model = set_model_params(ml_model_name, ml_model, initial_param)
     return ml_model
 
