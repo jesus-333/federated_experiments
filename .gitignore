@@ -1,7 +1,13 @@
 .venv
-*.DS_Store
-*.pyc
+*.crt
 *.csv
+*.csr
+*.key
+*.DS_Store
+*.pem
+*.pkl
+*.pyc
+*.srl
 flower_app/certificates
 flower_app/results
 results
