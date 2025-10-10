@@ -28,7 +28,7 @@ serverapp = "server_app:app"
 clientapp = "client_app:app"
 
 [tool.flwr.app.config]
-path_server_config = './config/server_config.toml'
+path_server_config = './config/server_config_ml.toml'
 
 [tool.flwr.federations]
 default = "local-simulation"

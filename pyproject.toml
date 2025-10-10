@@ -21,14 +21,14 @@ dependencies = [
 packages = ["."]
 
 [tool.flwr.app]
-publisher = "flwrlabs"
+publisher = "LCSB"
 
 [tool.flwr.app.components]
 serverapp = "flower_app_hist.server_app:app"
 clientapp = "flower_app_hist.client_app:app"
 
 [tool.flwr.app.config]
-path_server_config = './config/server_config.toml'
+path_server_config = './config/server_config_hist.toml'
 
 [tool.flwr.federations]
 default = "local-simulation"

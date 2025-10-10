@@ -10,14 +10,11 @@ Currently implemented algorithm are LDA, SVM, neural network, k-means.
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Imports
 
-import numpy as np
-import pandas as pd
+import pickle
 import warnings
 
-from collections.abc import Iterable
-
 from flwr.client import ClientApp
-from flwr.common import Context, Message, MetricRecord, RecordDict
+from flwr.common import ArrayRecord, Context, Message, MetricRecord, RecordDict
 
 import support
 
@@ -32,8 +29,16 @@ def train(msg: Message, context: Context):
     """
     Train the model on local data.
     """
+
+    # Get node config
+    path_client_data = context.node_config["path_client_data"]
+    fields_to_use_for_the_train = msg.content["fields_to_use_for_the_train"]
+    node_id = context.node_config['node_id']
+
+    # Load the data
+    x_train, y_train, _ = support.get_data(path_client_data, fields_to_use_for_the_train)
     
-    # Get config
+    # Get ml model config
     my_config = msg.content["config"]
     ml_model_name = my_config['ml_model_name']
     ml_model_config = my_config['ml_model_config']
@@ -43,14 +48,12 @@ def train(msg: Message, context: Context):
 
     # Setting initial parameters
     # Required because the model parameters are not initialized until the fit function is called
-    support.set_initial_params(my_config['ml_model_name'], ml_model)
+    support.set_initial_params(my_config['ml_model_name'], ml_model, 3, x_train.shape[1])
 
-    # Apply received pararameters
+    # Apply received parameters
     params = msg.content["arrays"].to_numpy_ndarrays()
     support.set_model_params(ml_model_name, ml_model_name, params)
 
-    # Load the data
-    x_train, y_train = get_data()
 
     # Ignore convergence failure due to low local epochs
     with warnings.catch_warnings():
@@ -59,55 +62,48 @@ def train(msg: Message, context: Context):
         ml_model.fit(x_train, y_train)
 
     # Let's compute train loss
-    y_train_pred_proba = model.predict_proba(X_train)
-    train_logloss = log_loss(y_train, y_train_pred_proba)
+    # y_train_pred_proba = ml_model.predict_proba(x_train)
+    # train_logloss = log_loss(y_train, y_train_pred_proba)
 
-    # Construct and return reply Message
-    ndarrays = get_model_params(model)
-    model_record = ArrayRecord(ndarrays)
-    metrics = {"num-examples": len(X_train), "train_logloss": train_logloss}
+    # Extract the trained model parameters
+    params_trained = support.get_model_parameters(ml_model_name, ml_model)
+    model_record = ArrayRecord(params_trained)
+
+    # Prepare metrics
+    metrics = {"num-examples": len(x_train)}
     metric_record = MetricRecord(metrics)
+
+    # Construct a Message with the results
     content = RecordDict({"arrays": model_record, "metrics": metric_record})
-    return Message(content=content, reply_to=msg)
+
+    # Save the model weights locally
+    path_to_save_model = context.node_config['path_to_save_model'] if 'path_to_save_model' in context.node_config else './'
+    with open(f'{path_to_save_model}/trained_params_{ml_model_name}_node_{node_id}.pkl', "wb") as f : pickle.dump(params, f)
+
+    return Message(content = content, reply_to = msg)
+
+@app.query()
+def query(msg : Message, context : Context) :
+    """
+    Send the weights of the trained model to the server.
+
+    Implemented to obtain the model weights of a single nodes outside the FL process. From what I see the FedAvg strategy only return the finale model weights after the last round.
+    For the PoC I also need the model weights of each node to show the difference between the models trained on different datasets.
+    """
+    
+    # Get the node config
+    node_id = context.node_config['node_id']
+    path_to_save_model = context.node_config['path_to_save_model'] if 'path_to_save_model' in context.node_config else './'
+
+    # Load the model weights
+    ml_model_name = msg.content['config']['ml_model_name']
+    with open(f"{path_to_save_model}/trained_params_{ml_model_name}_node_{node_id}.pkl", "rb") as f : params = pickle.load(f)
+
+    # Prepare the Message to send the model weights to the server
+    model_record = MetricRecord({"model_weights": params})
+    content = RecordDict({"query_results": model_record})
+
+    return Message(content = content, reply_to = msg)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-def get_data(path_client_data : str, bins_variable : str) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Load the data for a specific client from a CSV file.
-
-    Parameters
-    ----------
-    path_client_data : str
-        The path to the CSV file containing the client data.
-    bins_variable : str
-        The name of the column containing the histogram data.
-    class_to_filter : str
-        The class to keep in the data. If None, all classes are kept. Default is None.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray]
-        A tuple containing:
-        - data_hist : np.ndarray
-            The histogram data for the specified client.
-        - labels_per_sample : np.ndarray
-            The labels for each sample in the histogram data.
-    """
-    
-    # Load the dataset and get the data
-    dataset_client = pd.read_csv(path_client_data)
-
-    name_numerical_features = read_txt_list(f'{path_client_data}fields_clf.txt')
-    
-    # Get the labels (string format)
-    labels_str = dataset_client['Diagnosis'].to_numpy()
-
-    # Convert the labels to integers
-    labels_str_to_int = {'control': 0, 'UC': 1, 'CD': 2}
-    
-    # Get the labels (integer format)
-    label_int = [labels_str_to_int[label] for label in labels_str]
-
-
-    return x_data, y_data

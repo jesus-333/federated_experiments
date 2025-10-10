@@ -1,0 +1,6 @@
+n_nodes = 2
+max_number_of_attempts = 10
+n_bins = 10
+bins_variable = "Age"
+bins_distribution = "uniform"
+path_to_save = "./results/"

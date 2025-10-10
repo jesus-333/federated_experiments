@@ -38,12 +38,13 @@ def main(grid: Grid, context: Context) -> None:
     This `ServerApp` construct a histogram from partial-histograms reported by the `ClientApp`s.
     """
 
-    path_server_config = context.run_config['path_server_config'] if 'path_server_config' in context.run_config else './server_config.toml'
+    path_server_config = context.run_config['path_server_config']
     server_config = toml.load(path_server_config)
 
-    # Federation settings
-    min_nodes              = server_config['min_nodes'] if 'min_nodes' in server_config else server_config['n_nodes']
-    max_number_of_attempts = server_config['max_number_of_attempts'] if 'max_number_of_attempts' in server_config else 10
+    fields_to_use_for_train = support.read_txt_list(server_config['path_file_with_fields_to_use_for_the_train'])
+
+    # Load server data
+    x_server, y_server, _ = support.get_data(server_config['path_server_data'], fields_to_use_for_train)
     
     # Path to save the final results
     path_to_save = server_config['path_to_save'] if 'path_to_save' in server_config else './results/'
@@ -54,7 +55,8 @@ def main(grid: Grid, context: Context) -> None:
     # Dictionary used to communicate with the clients
     my_config = dict(
         ml_model_name = server_config['ml_model_name'],
-        ml_model_config = ml_model_config
+        ml_model_config = ml_model_config,
+        fields_to_use_for_train = fields_to_use_for_train
     )
 
     # Create ml model
@@ -62,7 +64,7 @@ def main(grid: Grid, context: Context) -> None:
     log(INFO, f"ML Model created: {ml_model}")
 
     # Setting initial parameters (it is required by flower) and convert them in an ArrayRecord representation
-    support.set_initial_params(my_config['ml_model_name'], ml_model)
+    support.set_initial_params(my_config['ml_model_name'], ml_model, 3, x_server.shape[1])
     arrays = ArrayRecord(support.get_model_params(ml_model))
     
     # Create FL strategy
@@ -77,14 +79,22 @@ def main(grid: Grid, context: Context) -> None:
     )
     
     # Get the results
-    ndarrays = result.arrays.to_numpy_ndarrays()
-    support.set_model_params(my_config['ml_model_name'], ml_model, ndarrays)
+    # Note that the function to_numpy_ndarrays() return the ArrayRecord as a list of NumPy ndarray.
+    params_final = result.arrays.to_numpy_ndarrays()
+    support.set_model_params(my_config['ml_model_name'], ml_model, params_final)
 
-    # Save results
-    for label in ['all', 'UC', 'CD', 'control'] :
-        # TODO
-        pass
+    # Save the final weights of the model
+    with open(f'{path_to_save}/final_params_{my_config["ml_model_name"]}.pkl', "wb") as f : pickle.dump(params_final, f)
 
+    # Get the model weights of the single node
+    n_nodes = server_config['n_nodes']
+    node_ids = get_node_ids(grid, n_nodes)
+    list_params_per_node = get_model_weights_from_clients(grid, node_ids, my_config)
+    
+    # Save the model weights of the single node
+    for i in range(n_nodes) :
+        with open(f'{path_to_save}/trained_params_{my_config["ml_model_name"]}_node_{node_ids[i]}.pkl', "wb") as f :
+            pickle.dump(list_params_per_node[i], f)
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Generic functions
@@ -187,10 +197,10 @@ def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my
 
     return replies
 
-def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = None, max_number_of_attempts : int = 10) -> list[Message]:
+def get_model_weights_from_clients(grid: Grid, node_ids : list[int], my_config : dict = None, max_number_of_attempts : int = 10) -> list :
     """
-    Use the function `send_and_receive_data` to send messages to the clients and receive their results.
-    If an error occurs, the function will retry until the maximum number of attempts is reached.
+    Implemented to obtain the model weights of a single nodes outside the FL process. From what I see the FedAvg strategy only return the finale model weights after the last round.
+    For the PoC I also need the model weights of each node to show the difference between the models trained on different datasets.
 
     Parameters
     grid : Grid
@@ -206,9 +216,9 @@ def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = N
 
     Returns
     -------
-    results : list[Message]
-        The results obtained from the clients. They are instances of the Message class.
-        See https://flower.ai/docs/framework/ref-api/flwr.common.Message.html for more details about the Message class.
+    list_params_per_node : list
+        List containing the model weights of each node.
+        The order of the nodes is the same as in the node_ids list.
     """
 
     n_attempts = 0
@@ -216,7 +226,6 @@ def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = N
         results = send_and_receive_data(grid, node_ids, server_round = 0, my_config = my_config)
 
         if results is not None :
-            # If no error, break the loop
             break
         else :
             n_attempts += 1
@@ -225,9 +234,21 @@ def get_data_from_clients(grid: Grid, node_ids : list[int], my_config : dict = N
                 raise Exception(f"Error in receiving data from clients during round {my_config['server_round']}. Maximum number of attempts ({max_number_of_attempts}) reached")
             time.sleep(2)
 
-    return results
+    list_params_per_node = []
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+    for rep in results :
+        # Get the content of the message
+        # Note that the key "query_results" is not a predefined key from the Flower framework. It is just a key used in the client app.
+        # If you want you could use whatever key you want, as long as it is the same in the client and server app.
+        query_results = rep.content["query_results"]
+        
+        # Get the model weights
+        params = query_results['model_weights']
+        list_params_per_node.append(params)
+
+    return list_params_per_node
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def save_results(label : str, info_to_save : dict, final_hist : np.ndarray, samples_mean : float, samples_std : float, path_to_save : str) -> None :
     """

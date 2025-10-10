@@ -11,7 +11,10 @@ Support function for the ml training
 # Imports
 
 import numpy as np
+import pandas as pd
 import sklearn.svm as svm
+
+from collections.abc import Iterable
 
 from flwr.common import NDArrays
 
@@ -29,6 +32,7 @@ def get_model_parameters(ml_model_name : str, ml_model) -> NDArrays:
     """
     Return the parameters of a sklearn model
     """
+
     if ml_model_name == 'SVC' :
         params = [
             ml_model.coef_,
@@ -54,7 +58,7 @@ def set_model_params(ml_model_name : str, ml_model, params: NDArrays) :
     return ml_model
 
 
-def set_initial_params(ml_model_name : str, ml_model, n_classes: int, n_features: int) :
+def set_initial_params(ml_model_name : str, ml_model, n_classes : int, n_features : int) :
     """
     Set initial parameters as zeros.
     
@@ -107,3 +111,40 @@ def read_txt_list(filepath : str) -> list[str]:
     lines = [line.strip() for line in lines if line.strip()]
     
     return lines
+
+
+def get_data(path_data : str, fields_to_use_for_the_train : Iterable[str] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Load the data from a csv file
+
+    Parameters
+    ----------
+    path_data : str
+        The path to the CSV file containing the data.
+    fields_to_use_for_the_train : Iterable[str] | None, optional
+        A list of fields to use for training. If None, all fields except the label are used.
+        The fields must be specified as the column names in the CSV file, i.e. it must be a list of strings.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        A tuple containing:
+        - data_hist : np.ndarray
+            The histogram data for the specified client.
+        - labels_per_sample : np.ndarray
+            The labels for each sample in the histogram data.
+    """
+    
+    # Load the dataset and get the data
+    dataset_client = pd.read_csv(path_data)
+    
+    x_data = dataset_client[fields_to_use_for_the_train].to_numpy()
+    
+    # Get the labels (string format)
+    labels_str = dataset_client['Diagnosis'].to_numpy()
+
+    # Convert the labels to integers
+    labels_str_to_int = {'Control': 0, 'UC': 1, 'CD': 2}
+    y_data = [labels_str_to_int[label] for label in labels_str]
+
+    return x_data, y_data, labels_str
