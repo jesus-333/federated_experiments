@@ -17,7 +17,6 @@ import pickle
 import time
 import toml
 
-from collections.abc import Iterable
 from logging import INFO
 
 from flwr.common import ArrayRecord, ConfigRecord, Context, Message, MessageType, RecordDict
@@ -25,7 +24,7 @@ from flwr.common.logger import log
 from flwr.server import Grid, ServerApp
 from flwr.serverapp import strategy
 
-import support
+import support_ml_app
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Flower ServerApp
@@ -35,33 +34,32 @@ app = ServerApp()
 @app.main()
 def main(grid: Grid, context: Context) -> None:
     """
-    This `ServerApp` construct a histogram from partial-histograms reported by the `ClientApp`s.
+    This `ServerApp` construct a histogram from partial-histograms reported by the `ClientApp`.
     """
 
     path_server_config = context.run_config['path_server_config']
     server_config = toml.load(path_server_config)
 
-    fields_to_use_for_train = support.read_txt_list(server_config['path_file_with_fields_to_use_for_the_train'])
+    fields_to_use_for_train = support_ml_app.read_txt_list(server_config['path_file_with_fields_to_use_for_the_train'])
 
     # Load server data
-    x_server, y_server, _ = support.get_data(server_config['path_server_data'], fields_to_use_for_train)
+    x_server, y_server, _ = support_ml_app.get_data(server_config['path_server_data'], fields_to_use_for_train)
     
     # Path to save the final results
     path_to_save = server_config['path_to_save'] if 'path_to_save' in server_config else './results/'
 
-    
     # Dictionary used to communicate with the clients
     my_config = server_config['ml_algorithm_config'] 
     my_config['ml_model_name'] = server_config['ml_model_name']
     my_config['fields_to_use_for_the_train'] = fields_to_use_for_train
 
     # Create ml model
-    ml_model = support.get_ml_model(my_config['ml_model_name'], my_config)
+    ml_model = support_ml_app.get_ml_model(my_config['ml_model_name'], my_config)
     log(INFO, f"ML Model created: {ml_model}")
 
     # Setting initial parameters (it is required by flower) and convert them in an ArrayRecord representation
-    support.set_initial_params(my_config['ml_model_name'], ml_model, 3, x_server.shape[1])
-    arrays = ArrayRecord(support.get_model_params(my_config['ml_model_name'], ml_model))
+    support_ml_app.set_initial_params(my_config['ml_model_name'], ml_model, 3, x_server.shape[1])
+    arrays = ArrayRecord(support_ml_app.get_model_params(my_config['ml_model_name'], ml_model))
     
     # Create FL strategy
     fl_strategy = strategy.FedAvg()
@@ -80,7 +78,7 @@ def main(grid: Grid, context: Context) -> None:
     # Get the results
     # Note that the function to_numpy_ndarrays() return the ArrayRecord as a list of NumPy ndarray.
     params_final = result.arrays.to_numpy_ndarrays()
-    support.set_model_params(my_config['ml_model_name'], ml_model, params_final)
+    support_ml_app.set_model_params(my_config['ml_model_name'], ml_model, params_final)
 
     # Save the final weights of the model
     with open(f'{path_to_save}/final_params_{my_config["ml_model_name"]}.pkl', "wb") as f : pickle.dump(params_final, f)
@@ -163,15 +161,15 @@ def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my
     messages = []
     
     # Add other information to message
-    recorddict = RecordDict()
+    record_dict = RecordDict()
 
     # Add personal configuration to message
-    if my_config is not None : recorddict['my_config'] = ConfigRecord(my_config)
-    # recorddict['my_config'] = ConfigRecord(my_config if my_config is not None else {})
+    if my_config is not None : record_dict['my_config'] = ConfigRecord(my_config)
+    # record_dict['my_config'] = ConfigRecord(my_config if my_config is not None else {})
 
     for node_id in node_ids:  # one message for each node
         message = Message(
-            content = recorddict,
+            content = record_dict,
             message_type = MessageType.QUERY,
             dst_node_id = node_id,
             group_id = str(server_round),
@@ -240,19 +238,21 @@ def get_model_weights_from_clients(grid: Grid, node_ids : list[int], my_config :
         # Note that the key "query_results" is not a predefined key from the Flower framework. It is just a key used in the client app.
         # If you want you could use whatever key you want, as long as it is the same in the client and server app.
         query_results = rep.content["query_results"]
-        
+
         # Get the model weights
         tmp_params = []
         if my_config['ml_model_name'] == 'SVM' :
             # Get the coefficients
             # Note that for SVM the params are [coef, intercept], coef is of shape (n_classes, n_features)
             tmp_coef = []
-            for i in range(len(query_results['coef'])) :
+            for i in range(3) :
                 tmp_coef.append(np.array(query_results[f'coef_class_{i}']))
             tmp_params.append(np.array(tmp_coef))
 
             # Get the intercept
             tmp_params.append(query_results['intercept'])
+
+        list_params_per_node.append(tmp_params)
 
     return list_params_per_node
 

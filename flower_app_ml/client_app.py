@@ -10,13 +10,14 @@ Currently implemented algorithm are LDA, SVM, neural network, k-means.
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Imports
 
+import os
 import pickle
 import warnings
 
 from flwr.client import ClientApp
 from flwr.common import ArrayRecord, Context, Message, MetricRecord, RecordDict
 
-import support
+import support_ml_app
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # warnings.filterwarnings("ignore", category = UserWarning)
@@ -39,18 +40,18 @@ def train(msg: Message, context: Context):
     ml_model_name = ml_model_config['ml_model_name']
 
     # Load the data
-    x_train, y_train, _ = support.get_data(path_client_data, ml_model_config['fields_to_use_for_the_train'])
+    x_train, y_train, _ = support_ml_app.get_data(path_client_data, ml_model_config['fields_to_use_for_the_train'])
 
     # Create ml model
-    ml_model = support.get_ml_model(ml_model_name, ml_model_config)
+    ml_model = support_ml_app.get_ml_model(ml_model_name, ml_model_config)
 
     # Setting initial parameters
     # Required because the model parameters are not initialized until the fit function is called
-    support.set_initial_params(ml_model_name, ml_model, 3, x_train.shape[1])
+    support_ml_app.set_initial_params(ml_model_name, ml_model, 3, x_train.shape[1])
 
     # Apply received parameters
     params = msg.content["arrays"].to_numpy_ndarrays()
-    support.set_model_params(ml_model_name, ml_model, params)
+    support_ml_app.set_model_params(ml_model_name, ml_model, params)
 
     # Ignore convergence failure due to low local epochs
     with warnings.catch_warnings():
@@ -63,11 +64,12 @@ def train(msg: Message, context: Context):
     # train_logloss = log_loss(y_train, y_train_pred_proba)
 
     # Extract the trained model parameters
-    params_trained = support.get_model_params(ml_model_name, ml_model)
+    params_trained = support_ml_app.get_model_params(ml_model_name, ml_model)
     model_record = ArrayRecord(params_trained)
 
     # Prepare metrics
-    metrics = {"num-examples": len(x_train)}
+    metrics = support_ml_app.compute_metrics(y_train, ml_model.predict(x_train))
+    metrics['num-examples'] = len(x_train)
     metric_record = MetricRecord(metrics)
 
     # Construct a Message with the results
@@ -75,7 +77,8 @@ def train(msg: Message, context: Context):
 
     # Save the model weights locally
     path_to_save_model = context.node_config['path_to_save_model'] if 'path_to_save_model' in context.node_config else './'
-    with open(f'{path_to_save_model}/trained_params_{ml_model_name}_node_{node_id}.pkl', "wb") as f : pickle.dump(params, f)
+    os.makedirs(path_to_save_model, exist_ok = True)
+    with open(f'{path_to_save_model}trained_params_{ml_model_name}_node_{node_id}.pkl', "wb") as f : pickle.dump(params, f)
 
     return Message(content = content, reply_to = msg)
 
@@ -105,8 +108,6 @@ def query(msg : Message, context : Context) :
             model_weights[f'coef_class_{i}'] = list(params[0][i])
 
         model_weights['intercept'] = list(params[1])
-
-    print(model_weights)
 
     # Prepare the Message to send the model weights to the server
     model_record = MetricRecord(model_weights)

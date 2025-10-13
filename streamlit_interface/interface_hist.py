@@ -10,7 +10,7 @@
 
 import streamlit as st
 
-import support_interface
+import support_interface_hist
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -35,9 +35,9 @@ hist_computation_option_column, hist_plot_column = st.columns(column_proportions
 
 
 with hist_computation_option_column :
-    hist_computation_config = support_interface.build_hist_computation_options(hist_canvas)
+    hist_computation_config = support_interface_hist.build_hist_computation_options(hist_canvas)
 
 with hist_plot_column :
-    support_interface.build_hist_plot_options(hist_canvas)
+    support_interface_hist.build_hist_plot_options(hist_canvas)
 
 st.write("---")

@@ -1,5 +1,5 @@
 """
-Support function used for the streamlit interface
+Support function used for the streamlit interface (hist)
 
 @author: Alberto Zancanaro (Jesus)
 @organization: Luxembourg Centre for Systems Biomedicine (LCSB)
@@ -13,7 +13,7 @@ import toml
 import streamlit as st
 import subprocess
 
-import support_plot
+import support_plot_hist
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -42,7 +42,7 @@ def read_txt_list(filepath : str) -> list[str]:
 
 def save_txt_list(filepath : str, data : list[str]) -> None:
     """
-    Save a list of strings to a text file, each string on a new line.
+    Save a list of strings to a text file, each string on a newline.
     
     Parameters
     ----------
@@ -115,7 +115,7 @@ def build_hist_plot_options(streamlit_container_for_the_plot) :
         label = 'Select the plot backend',
         options = ['matplotlib', 'streamlit'], index = 0,
         key = 'plot_backend',
-        on_change = support_plot.draw_hist,
+        on_change = support_plot_hist.draw_hist,
         args = [streamlit_container_for_the_plot]
     )
 
@@ -127,7 +127,7 @@ def build_hist_plot_options(streamlit_container_for_the_plot) :
             "3, plot, classes separated",
             "1 plot, classes separated"],
         key = 'plot_type',
-        on_change = support_plot.draw_hist,
+        on_change = support_plot_hist.draw_hist,
         args = [streamlit_container_for_the_plot]
     )
 
@@ -136,16 +136,16 @@ def build_hist_plot_options(streamlit_container_for_the_plot) :
         label = 'Normalize hist',
         key = 'normalize_hist',
         value = False,
-        on_change = support_plot.draw_hist,
+        on_change = support_plot_hist.draw_hist,
         args = [streamlit_container_for_the_plot]
     )
 
     st.selectbox(
         label = "Select color",
-        options = support_plot.get_color_hex(), index = 0,
-        format_func = support_plot.get_color_name_from_hex,
+        options = support_plot_hist.get_color_hex(), index = 0,
+        format_func = support_plot_hist.get_color_name_from_hex,
         key = 'color',
-        on_change = support_plot.draw_hist,
+        on_change = support_plot_hist.draw_hist,
         args = [streamlit_container_for_the_plot]
     )
 
@@ -158,29 +158,29 @@ def build_hist_plot_options_matplotlib(streamlit_container_for_the_plot) :
 
     st.slider(label = "Alpha", key = 'alpha',
               min_value = 0.5, max_value = 1., value = 1., step = 0.05,
-              on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
+              on_change = support_plot_hist.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
               )
 
     checkbox_col_1, checkbox_col_2 = st.columns([0.5, 0.5])
 
     with checkbox_col_1 :
-        st.checkbox('Display Grid', key = 'add_grid', value = True, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot])
-        st.checkbox('Display edge', key = 'add_edge', value = True, on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot])
+        st.checkbox('Display Grid', key = 'add_grid', value = True, on_change = support_plot_hist.draw_hist_matplotlib, args = [streamlit_container_for_the_plot])
+        st.checkbox('Display edge', key = 'add_edge', value = True, on_change = support_plot_hist.draw_hist_matplotlib, args = [streamlit_container_for_the_plot])
 
     with checkbox_col_2 :
         st.checkbox(
             label = 'Display Mean', key = 'add_mean', value = False,
-            on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
+            on_change = support_plot_hist.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
         )
 
         st.checkbox(
             label = 'Display Std', key = 'add_std', value = False,
-            on_change = support_plot.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
+            on_change = support_plot_hist.draw_hist_matplotlib, args = [streamlit_container_for_the_plot]
         )
 
         st.checkbox(
             label = 'Log scale y axis', key = 'y_axis_log', value = False,
-            on_change = support_plot.draw_hist, args = [streamlit_container_for_the_plot]
+            on_change = support_plot_hist.draw_hist, args = [streamlit_container_for_the_plot]
         )
 
 
@@ -213,9 +213,9 @@ def compute_hist(streamlit_container) :
     subprocess.call(['sh', './other_scripts/run_hist_app.sh'])
 
     if st.session_state.plot_backend == 'matplotlib' :
-        support_plot.draw_hist_matplotlib(streamlit_container)
+        support_plot_hist.draw_hist_matplotlib(streamlit_container)
     elif st.session_state.plot_backend == 'streamlit' :
-        support_plot.draw_hist_streamlit(streamlit_container)
+        support_plot_hist.draw_hist_streamlit(streamlit_container)
 
 def compute_hist_OLD() :
     from subprocess import Popen, PIPE, STDOUT

@@ -12,7 +12,9 @@ Support function for the ml training
 
 import numpy as np
 import pandas as pd
-import sklearn.svm as svm
+
+from sklearn import svm
+from sklearn import metrics
 
 from collections.abc import Iterable
 
@@ -122,7 +124,6 @@ def read_txt_list(filepath : str) -> list[str]:
     
     return lines
 
-
 def get_data(path_data : str, fields_to_use_for_the_train : Iterable[str] | None = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Load the data from a csv file
@@ -158,3 +159,16 @@ def get_data(path_data : str, fields_to_use_for_the_train : Iterable[str] | None
     y_data = [labels_str_to_int[label] for label in labels_str]
 
     return x_data, y_data, labels_str
+
+def compute_metrics(y_true, y_predict) :
+    """
+    Compute metrics based on labels.
+    Currently implemented metrics :
+    - Accuracy
+    """
+
+    metrics_dict = dict()
+
+    metrics_dict['accuracy'] = metrics.accuracy_score(y_true, y_predict)
+
+    return metrics_dict

@@ -310,9 +310,9 @@ def draw_hist_streamlit(streamlit_container) :
 def get_color_hex() :
     color_hex = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
-    # List without blue, orange and green (the first three colors of the default matplotlib color cycle)
+    # List without blue, orange, and green (the first three colors of the default matplotlib color cycle)
     # Used to avoid confusion when plotting multiple histograms with Type 3 plot.
-    # In type 3 I used the default color cycle of matplotlib, which starts with blue, orange and green.
+    # In type 3 I used the default color cycle of matplotlib, which starts with blue, orange, and green.
     color_hex = ['#17becf', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22']
 
     return color_hex

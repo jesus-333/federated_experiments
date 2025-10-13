@@ -41,7 +41,7 @@ address = "127.0.0.1:9093"
 insecure = true # To run with insecure connection
 # root-certificates = "certificates/ca.crt" # To run with TLS (secure) connection
 
-[tool.flwr.federations.remote-hist]
+[tool.flwr.federations.remote-ml_app]
 # address = "10.240.18.119:9093"
 address = "127.0.0.1:9093"
 insecure = true  # Disable TLS (not recommended for production)
