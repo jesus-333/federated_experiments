@@ -1,0 +1,6 @@
+n_nodes = 2
+max_number_of_attempts = 10
+n_bins = 15
+bins_variable = "3.2.1.14: Chitinase"
+bins_distribution = "logarithmic"
+path_to_save = "./results/"
