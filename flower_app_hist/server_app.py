@@ -170,7 +170,7 @@ def get_node_ids(grid: Grid, min_nodes: int) -> list[int]:
 
     return all_node_ids
 
-def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my_config : dict = None) -> list[Message] | None:
+def send_and_receive_data(grid: Grid, node_ids: list[int], server_round: int, my_config : dict = None) :
     """
     Send messages to the specified node ids and wait for all results.
 

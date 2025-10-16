@@ -86,8 +86,8 @@ def set_initial_params(ml_model_name : str, ml_model, n_classes : int, n_feature
 
         initial_param = [coef, intercept]
 
-        x_fake = np.random.rand(5, n_features)
-        y_fake = np.random.randint(0, n_classes, 5)
+        x_fake = np.random.rand(n_classes, n_features)
+        y_fake = np.arange(n_classes)
         ml_model.fit(x_fake, y_fake)
     elif ml_model_name == 'k-means' :
         initial_param = get_kmeans_initial_parameters()
