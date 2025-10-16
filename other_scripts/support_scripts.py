@@ -124,7 +124,7 @@ def get_idx_to_split_data_V3(labels_list : list, percentage_split_list : list, s
 
     # Check input parameter
     # Note that check for 0.9999999999999999 is due to the float precision
-    possible_sum = [1, 0.9999999999999999, 0.9999999999999998]
+    possible_sum = [1, 0.9999999999999999, 0.9999999999999998, 0.9999999999999997, 0.9999999999999996]
     if np.sum(percentage_split_list) not in possible_sum : raise ValueError("The sum of the elements in percentage_split_list must be equal to 1. Current sum is {}".format(np.sum(percentage_split_list)))
 
     # Use of the seed for reproducibility
