@@ -19,6 +19,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 import support_ml_app
+import support_interface_hist
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -42,9 +43,15 @@ def plot_decision_boundary(streamlit_container_for_the_plot) :
     # Create a meshgrid
     x_min, x_max = data_2D[:, 0].min(), data_2D[:, 0].max()
     y_min, y_max = data_2D[:, 1].min(), data_2D[:, 1].max()
+    diff_x = np.abs(np.diff(data_2D[:, 0]))
+    diff_y = np.abs(np.diff(data_2D[:, 1]))
+    step_x = np.mean(diff_x)
+    step_y = np.mean(diff_y)
     print(x_min, x_max, y_min, y_max)
-    step = np.mean([np.diff(data_2D[:, 0]), np.diff(data_2D[:, 1])])
-    xx, yy = get_meshgrid(x_min, x_max, y_min, y_max, step = step, padding_percentage = st.session_state.grid_padding)
+    print(diff_x, diff_y)
+    print(step_x, step_y)
+    print(data_2D[:, 0], data_2D.shape)
+    xx, yy = get_meshgrid(x_min, x_max, y_min, y_max, step_x = step_x, step_y = step_y, padding_percentage = st.session_state.grid_padding)
 
     # Predict the class for each point in the meshgrid
     grid_points = np.c_[xx.ravel(), yy.ravel()]
@@ -73,8 +80,12 @@ def get_scatter_data_plot(data_2D : np.ndarray, labels : np.ndarray) :
                    edgecolors = 'k',
                    )
 
-    ax.set_xlabel('Component 1')
-    ax.set_ylabel('Component 2')
+    if st.session_state.dimensionality_reduction == 'none' :
+        ax.set_xlabel(f'component 1: {st.session_state.clf_variable_1}')
+        ax.set_ylabel(f'component 2: {st.session_state.clf_variable_2}')
+    else :
+        ax.set_xlabel('component 1')
+        ax.set_ylabel('component 2')
     
     return fig, ax
 
@@ -82,7 +93,9 @@ def get_scatter_data_plot(data_2D : np.ndarray, labels : np.ndarray) :
 # Data function
 
 def get_dimesionality_reducttion_method() :
-    if st.session_state.dimensionality_reduction == 'PCA' :
+    if st.session_state.dimensionality_reduction == 'None' :
+        return None
+    elif st.session_state.dimensionality_reduction == 'PCA' :
         dim_reduction_method = PCA(n_components = 2)
     elif st.session_state.dimensionality_reduction == 't-SNE' :
         dim_reduction_method = TSNE(n_components = 2, init = 'random')
@@ -92,11 +105,30 @@ def get_dimesionality_reducttion_method() :
     return dim_reduction_method
 
 def reduce_data_dimensionality(data : np.ndarray, dim_reduction_method) -> np.ndarray :
-    data_2D = dim_reduction_method.fit_transform(data)
+    if st.session_state.dimensionality_reduction == 'None' :
+        # Get the two variable to plot
+        clf_variables_list = np.asarray(support_interface_hist.read_txt_list("./streamlit_interface/field_hist.txt"))
+        clf_variable_1 = st.session_state.clf_variable_1
+        clf_variable_2 = st.session_state.clf_variable_2
+        
+        # Get the idx
+        idx_1 = clf_variables_list == clf_variable_1
+        idx_2 = clf_variables_list == clf_variable_2
+        
+        # Get the two dimension
+        data_2D = np.asarray([data[:, idx_1], data[:, idx_2]])
+
+        # Remove the extra dimension and transpose
+        data_2D = np.squeeze(data_2D).T
+    else :
+        data_2D = dim_reduction_method.fit_transform(data)
+
     return data_2D
 
 def reverse_data_dimensionality(data_2D : np.ndarray, dim_reduction_method) -> np.ndarray :
-    if st.session_state.dimensionality_reduction == 'PCA' :
+    if st.session_state.dimensionality_reduction == 'None' :
+        pass
+    elif st.session_state.dimensionality_reduction == 'PCA' :
         reversed_data = dim_reduction_method.inverse_transform(data_2D)
     elif st.session_state.dimensionality_reduction == 't-SNE' :
         raise NotImplementedError("t-SNE cannot be inverted.")
@@ -106,7 +138,7 @@ def reverse_data_dimensionality(data_2D : np.ndarray, dim_reduction_method) -> n
     return reversed_data
 
 @st.cache_data
-def get_meshgrid(x_min, x_max, y_min, y_max, step = 0.01, padding_percentage = 0.05) :
+def get_meshgrid(x_min, x_max, y_min, y_max, step_x :float, step_y : float, padding_percentage = 0.05) :
     """
     Create a meshgrid for plotting decision boundaries.
     """
@@ -115,7 +147,8 @@ def get_meshgrid(x_min, x_max, y_min, y_max, step = 0.01, padding_percentage = 0
     if x_min == x_max : raise ValueError(f"x_min and x_max cannot be the same. Got {x_min}.")
     if y_min == y_max : raise ValueError(f"y_min and y_max cannot be the same. Got {y_min}.")
     if padding_percentage <= 0 or padding_percentage > 1 : raise ValueError(f"Padding percentage must be between 0 and 1. Got {padding_percentage}.")
-    if step <= 0 : raise ValueError(f"Step must be positive. Got {step}.")
+    if step_x <= 0 : raise ValueError(f"step_x must be positive. Got {step_x}.")
+    if step_y <= 0 : raise ValueError(f"step_y must be positive. Got {step_y}.")
 
     # Padding, to avoid points on the edge of the plot
     x_min = x_min * (1 + padding_percentage) if x_min < 0 else x_min * (1 - padding_percentage)
@@ -130,7 +163,10 @@ def get_meshgrid(x_min, x_max, y_min, y_max, step = 0.01, padding_percentage = 0
     if y_max == 0 : y_max = abs(y_min) * padding_percentage # Note that if y_max is 0 then y_min is negative
 
     # Create the meshgrid
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, step), np.arange(y_min, y_max, step))
+    num_x = int(np.ceil((x_max - x_min) / step_x))
+    num_y = int(np.ceil((y_max - y_min) / step_y))
+    print(num_x, num_y)
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, num_x), np.arange(y_min, y_max, num_y))
 
     return xx, yy
 

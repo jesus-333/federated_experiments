@@ -13,6 +13,7 @@ import streamlit as st
 import subprocess
 
 import support_plot_ml
+import support_interface_hist
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -78,13 +79,38 @@ def build_ml_plot_options(streamlit_container_for_the_plot) :
 
     st.selectbox(
         label = 'Dimensionality Reduction Method',
-        options = ['PCA', 't-SNE'], index = 0,
+        options = ['None', 'PCA', 't-SNE'], index = 0,
         key = 'dimensionality_reduction',
         on_change = support_plot_ml.plot_decision_boundary,
         args = [streamlit_container_for_the_plot]
     )
 
+    build_options_dimensionality_reduction(st.session_state.dimensionality_reduction, streamlit_container_for_the_plot)
 
+def build_options_dimensionality_reduction(dimensionality_reduction_methods : str, streamlit_container_for_the_plot) :
+    if dimensionality_reduction_methods == 'None' :
+        clf_variables = support_interface_hist.read_txt_list("./streamlit_interface/field_hist.txt")
+
+        # Create column for the two variable to plot
+        column_variable_1, column_variable_2 = st.columns([0.5, 0.5])
+
+        with column_variable_1 :
+            st.selectbox(
+                label = 'Variable 1',
+                options = clf_variables, index = 0,
+                key = 'clf_variable_1',
+                on_change = support_plot_ml.plot_decision_boundary,
+                args = [streamlit_container_for_the_plot]
+            )
+
+        with column_variable_2 :
+            st.selectbox(
+                label = 'Variable 2',
+                options = clf_variables, index = 1,
+                key = 'clf_variable_2',
+                on_change = support_plot_ml.plot_decision_boundary,
+                args = [streamlit_container_for_the_plot]
+            )
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def train_ml_model(streamlit_container_for_the_plot) :
